@@ -1,11 +1,9 @@
-</body>
-</html>
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minecraft Web - Universal Compatibility Edition</title>
+    <title>Minecraft Web - Dynamic Inventory</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: 'Courier New', monospace; user-select: none; }
         
@@ -25,7 +23,7 @@
         #crosshair::after { top: 0; left: 7px; width: 2px; height: 16px; }
 
         #status-bars {
-            position: absolute; bottom: 70px; left: 50%; transform: translateX(-50%);
+            position: absolute; bottom: 75px; left: 50%; transform: translateX(-50%);
             display: flex; gap: 40px; z-index: 10; pointer-events: none;
         }
         .bar-container {
@@ -35,8 +33,8 @@
 
         #hotbar-container {
             position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
-            display: flex; flex-wrap: wrap; justify-content: center; max-width: 95vw;
-            background: rgba(30, 30, 30, 0.7); border: 2px solid #111; padding: 2px; gap: 2px; z-index: 10;
+            display: flex; gap: 2px; z-index: 10;
+            background: rgba(30, 30, 30, 0.7); border: 2px solid #111; padding: 2px;
         }
         .hotbar-slot {
             position: relative; width: 44px; height: 44px; background: rgba(139, 139, 139, 0.8); border: 2px solid #555;
@@ -45,30 +43,33 @@
         .hotbar-slot.selected { border: 2px solid white; box-shadow: 0 0 8px rgba(255,255,255,0.8); }
         .hotbar-slot canvas { width: 32px; height: 32px; image-rendering: pixelated; }
         .item-count { position: absolute; bottom: 2px; right: 4px; color: white; font-size: 14px; text-shadow: 1px 1px 0 #000; font-weight: bold; }
+        .key-hint { position: absolute; top: 2px; left: 4px; color: #eee; font-size: 11px; font-weight: bold; text-shadow: 1px 1px 0 #000; pointer-events: none; }
 
         .overlay-menu {
             position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
             background: rgba(0, 0, 0, 0.7); color: white; display: none; flex-wrap: wrap; flex-direction: column;
-            align-items: center; justify-content: center; z-index: 50;
+            align-items: center; justify-content: center; z-index: 50; overflow-y: auto; padding: 20px 0;
         }
         .title { font-size: 40px; margin-bottom: 20px; text-shadow: 3px 3px 0 #000; }
         .btn { padding: 10px 40px; background: #c6c6c6; border: 2px solid #000; border-top-color: #fff; border-left-color: #fff; color: #000; font-size: 20px; cursor: pointer; margin: 10px; }
         .btn:hover { background: #9999ff; }
         .btn:disabled { background: #555; color: #888; cursor: not-allowed; border-color: #333; }
         
-        #crafting-panel {
+        .panel {
             background: #c6c6c6; border: 4px solid #000; border-top-color: #fff; border-left-color: #fff;
-            padding: 20px; color: #000; width: 400px; max-width: 90%;
+            padding: 20px; color: #000; width: 520px; max-width: 90%; margin-bottom: 20px;
         }
         .recipe { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 2px solid #888; }
         .recipe:last-child { border-bottom: none; }
-        .tips { position: absolute; bottom: 100px; color: white; font-size: 16px; text-shadow: 1px 1px 0 #000; z-index: 10; text-align: center; width: 100%; pointer-events: none;}
+        .tips { position: absolute; bottom: 105px; color: white; font-size: 16px; text-shadow: 1px 1px 0 #000; z-index: 10; text-align: center; width: 100%; pointer-events: none;}
 
         #damage-flash {
             position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
             background: rgba(255, 0, 0, 0.35); display: none; pointer-events: none; z-index: 45;
         }
         .env-notice { font-size: 13px; color: #bbb; margin-top: 15px; text-align: center; line-height: 1.5; max-width: 80%; }
+        
+        #inventory-grid .hotbar-slot:hover { border-color: #fff; }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
@@ -76,13 +77,13 @@
 <body>
 
     <div id="f3-menu">
-        Minecraft Web Universal Edition<br>FPS: <span id="fps-counter">0</span><br>
+        Minecraft Web Dynamic Edition<br>FPS: <span id="fps-counter">0</span><br>
         Blocks: <span id="block-counter">0</span> | Mobs: <span id="mob-counter">0</span><br>
         XYZ: <span id="debug-xyz">0 / 0 / 0</span>
     </div>
     <div id="crosshair"></div>
     <div id="damage-flash"></div>
-    <div class="tips">W A S D: 移動 | 空白鍵: 跳躍 (無自動上樓) | 左鍵: 破壞/轉視角 | 右鍵: 放置/吃肉</div>
+    <div class="tips">W A S D: 移動 | 空白鍵: 跳躍/游泳 | 左/右鍵: 破壞/放置 | 數字鍵 1~0: 切換物品 | E: 打開背包</div>
     
     <div id="status-bars">
         <div id="health-container" class="bar-container"></div>
@@ -93,19 +94,28 @@
     <div id="pause-menu" class="overlay-menu" style="display: flex;">
         <div class="title">Minecraft Web</div>
         <div class="btn" id="resume-btn">開始生存</div>
-        <div class="env-notice">
-            💡 智慧相容提示：若點擊後滑鼠未隱藏，代表瀏覽器限制了當前視窗。<br>
-            此時您可以**「按住滑鼠左鍵並拖曳」**來旋轉視角！下載為 .html 檔案單獨開啟可體驗完美全螢幕鎖定。
-        </div>
+        <div class="env-notice">💡 若點擊後滑鼠未隱藏，代表瀏覽器限制了當前視窗。可按住滑鼠左鍵拖曳旋轉視角！</div>
     </div>
 
-    <div id="inventory-menu" class="overlay-menu">
-        <div class="title">合成背包</div>
-        <div id="crafting-panel">
-            <h3 style="margin-top: 0;">可用配方：</h3>
+    <div id="interaction-menu" class="overlay-menu">
+        <div class="title" id="interact-title">隨身背包</div>
+        
+        <div id="inventory-panel" class="panel">
+            <h3 style="margin-top: 0; color: #0000aa;">📦 所有物品庫 (點擊放入目前選定的快捷格)：</h3>
+            <div id="inventory-grid" style="display: flex; flex-wrap: wrap; gap: 5px;"></div>
+        </div>
+
+        <div id="crafting-panel" class="panel">
+            <h3 style="margin-top: 0;" id="crafting-subtitle">簡易合成：</h3>
             <div id="recipes-container"></div>
         </div>
-        <div class="btn" id="close-inv-btn">關閉背包</div>
+
+        <div id="furnace-panel" class="panel" style="display: none;">
+            <h3 style="margin-top: 0; color: #8b0000;">🔥 熔煉選單 (需要燃料)：</h3>
+            <div id="smelting-container"></div>
+        </div>
+
+        <div class="btn" id="close-inv-btn">關閉</div>
     </div>
 
     <div id="death-menu" class="overlay-menu" style="background: rgba(100, 0, 0, 0.85);">
@@ -153,6 +163,15 @@
             else if (type === 'gold_ore') { drawNoise('#7D7D7D', 0.1); ctx.fillStyle = '#FCEE4B'; for(let i=0; i<10; i++) ctx.fillRect(Math.random()*14+1, Math.random()*14+1, 2, 2); }
             else if (type === 'diamond_ore') { drawNoise('#7D7D7D', 0.1); ctx.fillStyle = '#5DECF4'; for(let i=0; i<8; i++) ctx.fillRect(Math.random()*14+1, Math.random()*14+1, 2, 2); }
             else if (type === 'meat') { drawNoise('#B22222', 0.2); ctx.fillStyle = '#FFC0CB'; ctx.fillRect(4, 4, 3, 3); ctx.fillRect(9, 7, 3, 4); } 
+            else if (type === 'water') { ctx.fillStyle = '#3377FF'; ctx.fillRect(0, 0, 16, 16); ctx.fillStyle = 'rgba(255,255,255,0.15)'; for(let i=0; i<5; i++) ctx.fillRect(Math.random()*16, Math.random()*16, 4, 1); }
+            else if (type === 'lava') { ctx.fillStyle = '#FF4500'; ctx.fillRect(0, 0, 16, 16); ctx.fillStyle = '#FF8C00'; for(let i=0; i<8; i++) ctx.fillRect(Math.random()*16, Math.random()*16, 2, 2); }
+            else if (type === 'crafting_top') { drawNoise('#cd853f', 0.1); ctx.fillStyle = '#8b4513'; ctx.fillRect(0, 0, 16, 2); ctx.fillRect(0, 7, 16, 2); ctx.fillRect(0, 14, 16, 2); ctx.fillRect(0, 0, 2, 16); ctx.fillRect(7, 0, 2, 16); ctx.fillRect(14, 0, 2, 16); }
+            else if (type === 'crafting_side') { drawNoise('#cd853f', 0.1); ctx.fillStyle = '#8b4513'; ctx.fillRect(0, 0, 16, 4); ctx.fillStyle = '#555'; ctx.fillRect(3, 6, 4, 2); ctx.fillRect(9, 8, 2, 4); }
+            else if (type === 'furnace_front') { drawNoise('#7D7D7D', 0.1); ctx.fillStyle = '#222'; ctx.fillRect(3, 3, 10, 3); ctx.fillStyle = '#FF4500'; ctx.fillRect(4, 9, 8, 4); ctx.fillStyle = '#FF8C00'; ctx.fillRect(5, 10, 6, 2); }
+            else if (type === 'furnace_side') { drawNoise('#7D7D7D', 0.1); ctx.fillStyle = '#555'; ctx.fillRect(0, 0, 16, 1); ctx.fillRect(0, 15, 16, 1); ctx.fillRect(0, 0, 1, 16); ctx.fillRect(15, 0, 1, 16); }
+            else if (type === 'cooked_meat') { drawNoise('#8B4513', 0.1); ctx.fillStyle = '#A0522D'; ctx.fillRect(4, 4, 3, 3); ctx.fillRect(9, 7, 3, 4); }
+            else if (type === 'iron_ingot') { drawNoise('#D8AF93', 0.1); ctx.fillStyle = '#eee'; ctx.fillRect(4, 6, 8, 4); }
+            else if (type === 'gold_ingot') { drawNoise('#FCEE4B', 0.1); ctx.fillStyle = '#fff'; ctx.fillRect(4, 6, 8, 4); }
 
             const texture = new THREE.CanvasTexture(canvas); texture.magFilter = THREE.NearestFilter; 
             return { tex: texture, canvas: canvas };
@@ -171,13 +190,28 @@
             10: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('gold_ore').tex }), name: "金礦", thumb: generateTexture('gold_ore').canvas },
             11: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('diamond_ore').tex }), name: "鑽石礦", thumb: generateTexture('diamond_ore').canvas },
             12: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('bedrock').tex }), name: "基岩", thumb: null },
-            13: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('meat').tex }), name: "生肉", thumb: generateTexture('meat').canvas }
+            13: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('meat').tex }), name: "生肉", thumb: generateTexture('meat').canvas },
+            14: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('water').tex, transparent: true, opacity: 0.6, roughness: 0.1 }), name: "水", thumb: generateTexture('water').canvas },
+            15: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('lava').tex, emissive: new THREE.Color(0xFF2200), roughness: 0.8 }), name: "岩漿", thumb: generateTexture('lava').canvas },
+            16: { mat: [new THREE.MeshStandardMaterial({map:generateTexture('crafting_side').tex}), new THREE.MeshStandardMaterial({map:generateTexture('crafting_side').tex}), new THREE.MeshStandardMaterial({map:generateTexture('crafting_top').tex}), new THREE.MeshStandardMaterial({map:generateTexture('planks').tex}), new THREE.MeshStandardMaterial({map:generateTexture('crafting_side').tex}), new THREE.MeshStandardMaterial({map:generateTexture('crafting_side').tex})], name: "合成台", thumb: generateTexture('crafting_top').canvas },
+            17: { mat: [new THREE.MeshStandardMaterial({map:generateTexture('furnace_side').tex}), new THREE.MeshStandardMaterial({map:generateTexture('furnace_side').tex}), new THREE.MeshStandardMaterial({map:generateTexture('furnace_side').tex}), new THREE.MeshStandardMaterial({map:generateTexture('furnace_side').tex}), new THREE.MeshStandardMaterial({map:generateTexture('furnace_front').tex}), new THREE.MeshStandardMaterial({map:generateTexture('furnace_side').tex})], name: "熔爐", thumb: generateTexture('furnace_front').canvas },
+            18: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('cooked_meat').tex }), name: "烤肉", thumb: generateTexture('cooked_meat').canvas },
+            19: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('iron_ingot').tex }), name: "鐵錠", thumb: generateTexture('iron_ingot').canvas },
+            20: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('gold_ingot').tex }), name: "金錠", thumb: generateTexture('gold_ingot').canvas }
         };
 
-        // --- 3. 狀態與背包 UI ---
-        const INVENTORY_SLOTS = 13; 
-        let selectedSlot = 1;
-        let inventory = { 1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0, 8:0, 9:0, 10:0, 11:0, 12:0, 13:0 }; 
+        // 🚫 定義哪些物品「不可以直接被放在地上當成方塊」
+        const UNPLACEABLE_ITEMS = [8, 9, 10, 11, 13, 18, 19, 20];
+
+        // --- 3. 狀態與背包 UI (動態空背包系統) ---
+        const TOTAL_ITEMS = 20; 
+        const HOTBAR_SLOTS = 10; 
+        
+        let selectedHotbarIndex = 0; 
+        // 🗂️ 動態快捷列 (一開始全空)
+        let hotbar = new Array(HOTBAR_SLOTS).fill(null); 
+        // 🎒 背包內容 (一開始全空)
+        let inventory = { 1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0, 8:0, 9:0, 10:0, 11:0, 12:0, 13:0, 14:0, 15:0, 16:0, 17:0, 18:0, 19:0, 20:0 }; 
 
         let health = 20; const maxHealth = 20;
         let hunger = 20; const maxHunger = 20; let hungerTimer = 0;
@@ -185,10 +219,41 @@
         let uiState = 'PAUSE'; 
 
         const recipes = [
-            { inputId: 4, inputQty: 1, outputId: 6, outputQty: 4, desc: "木板 x4 (需 1x 原木)" },
-            { inputId: 3, inputQty: 1, outputId: 7, outputQty: 1, desc: "玻璃 x1 (需 1x 石頭)" },
-            { inputId: 2, inputQty: 1, outputId: 1, outputQty: 1, desc: "草地 x1 (需 1x 泥土)" }
+            { inputId: 4, inputQty: 1, outputId: 6, outputQty: 4, desc: "木板 x4 (需 1x 原木)", reqTable: false },
+            { inputId: 6, inputQty: 4, outputId: 16, outputQty: 1, desc: "合成台 x1 (需 4x 木板)", reqTable: false },
+            { inputId: 3, inputQty: 8, outputId: 17, outputQty: 1, desc: "熔爐 x1 (需 8x 石頭)", reqTable: true },
+            { inputId: 3, inputQty: 1, outputId: 7, outputQty: 1, desc: "玻璃 x1 (需 1x 石頭)", reqTable: true },
+            { inputId: 2, inputQty: 1, outputId: 1, outputQty: 1, desc: "草地 x1 (需 1x 泥土)", reqTable: true }
         ];
+
+        const smeltRecipes = [
+            { inputId: 13, fuelId: 8, outputId: 18, outputQty: 1, desc: "烤肉 x1 (需 1x 生肉 + 1x 煤礦)" },
+            { inputId: 9, fuelId: 8, outputId: 19, outputQty: 1, desc: "鐵錠 x1 (需 1x 鐵礦 + 1x 煤礦)" },
+            { inputId: 10, fuelId: 8, outputId: 20, outputQty: 1, desc: "金錠 x1 (需 1x 金礦 + 1x 煤礦)" },
+            { inputId: 4, fuelId: 4, outputId: 8, outputQty: 1, desc: "木炭(煤礦) x1 (需 1x 原木 + 1x 原木當燃料)" }
+        ];
+
+        // 📦 獲取物品機制：智慧填入空位
+        function gainItem(id, qty = 1) {
+            if (inventory[id] === 0 && !hotbar.includes(id)) {
+                let emptyIdx = hotbar.indexOf(null);
+                if (emptyIdx !== -1) hotbar[emptyIdx] = id;
+            }
+            inventory[id] += qty;
+            updateInventoryUI();
+        }
+
+        // 📦 消耗物品機制：用光自動清除
+        function loseItem(id, qty = 1) {
+            inventory[id] -= qty;
+            if (inventory[id] <= 0) {
+                inventory[id] = 0;
+                for (let i = 0; i < hotbar.length; i++) {
+                    if (hotbar[i] === id) hotbar[i] = null;
+                }
+            }
+            updateInventoryUI();
+        }
 
         function updateHealthUI() {
             const container = document.getElementById('health-container'); container.innerHTML = '';
@@ -218,46 +283,120 @@
             if (health <= 0) { setUIState('DEATH'); }
         }
 
+        // 🎨 渲染 10 格空快捷列
+        function renderHotbar() {
+            const container = document.getElementById('hotbar-container');
+            container.innerHTML = '';
+            for(let i = 0; i < HOTBAR_SLOTS; i++) {
+                const itemId = hotbar[i];
+                const slot = document.createElement('div'); 
+                slot.className = `hotbar-slot ${i === selectedHotbarIndex ? 'selected' : ''}`; 
+                
+                // 只有物品存在且數量大於0才繪製圖示
+                if (itemId !== null && itemsDict[itemId] && itemsDict[itemId].thumb && inventory[itemId] > 0) {
+                    const canvasClone = document.createElement('canvas');
+                    canvasClone.width = 32; canvasClone.height = 32;
+                    canvasClone.getContext('2d').drawImage(itemsDict[itemId].thumb, 0, 0);
+                    slot.appendChild(canvasClone); 
+                    
+                    const lbl = document.createElement('span'); 
+                    lbl.className = 'item-count'; 
+                    lbl.innerText = inventory[itemId];
+                    slot.appendChild(lbl);
+                }
+
+                const keyHint = document.createElement('span');
+                keyHint.className = 'key-hint';
+                keyHint.innerText = i === 9 ? '0' : (i + 1).toString();
+                slot.appendChild(keyHint);
+
+                container.appendChild(slot);
+            }
+        }
+
+        // 🎨 渲染背包網格
+        function renderInventoryGrid() {
+            const invGrid = document.getElementById('inventory-grid');
+            if (!invGrid) return;
+            invGrid.innerHTML = '';
+            for(let i = 1; i <= TOTAL_ITEMS; i++) {
+                if(i === 12) continue; // 跳過基岩
+                const slot = document.createElement('div'); 
+                slot.className = 'hotbar-slot'; 
+                slot.style.cursor = 'pointer';
+                slot.style.opacity = inventory[i] > 0 ? "1" : "0.4";
+                slot.title = itemsDict[i].name; 
+                
+                if (itemsDict[i].thumb) {
+                    const canvasClone = document.createElement('canvas');
+                    canvasClone.width = 32; canvasClone.height = 32;
+                    canvasClone.getContext('2d').drawImage(itemsDict[i].thumb, 0, 0);
+                    slot.appendChild(canvasClone); 
+                }
+                
+                const lbl = document.createElement('span'); 
+                lbl.className = 'item-count'; 
+                lbl.innerText = inventory[i];
+                slot.appendChild(lbl);
+
+                // 點擊後放入快捷列
+                slot.onclick = () => {
+                    if (inventory[i] > 0) {
+                        hotbar[selectedHotbarIndex] = i;
+                        updateInventoryUI();
+                    }
+                };
+                invGrid.appendChild(slot);
+            }
+        }
+
         function renderCraftingMenu() {
             const container = document.getElementById('recipes-container'); container.innerHTML = '';
             recipes.forEach(r => {
+                if (r.reqTable && uiState !== 'CRAFTING') return;
+
                 const div = document.createElement('div'); div.className = 'recipe';
                 const text = document.createElement('span'); text.innerText = r.desc;
                 const btn = document.createElement('button'); btn.className = 'btn'; btn.innerText = '合成';
                 if (inventory[r.inputId] < r.inputQty) { btn.disabled = true; btn.innerText = '材料不足'; } 
-                else { btn.onclick = () => { inventory[r.inputId] -= r.inputQty; inventory[r.outputId] += r.outputQty; updateInventoryUI(); }; }
+                else { 
+                    btn.onclick = () => { 
+                        loseItem(r.inputId, r.inputQty);
+                        gainItem(r.outputId, r.outputQty);
+                    }; 
+                }
+                div.appendChild(text); div.appendChild(btn); container.appendChild(div);
+            });
+        }
+
+        function renderFurnaceMenu() {
+            const container = document.getElementById('smelting-container'); container.innerHTML = '';
+            smeltRecipes.forEach(r => {
+                const div = document.createElement('div'); div.className = 'recipe';
+                const text = document.createElement('span'); text.innerText = r.desc;
+                const btn = document.createElement('button'); btn.className = 'btn'; btn.innerText = '熔煉';
+                
+                if (inventory[r.inputId] < 1 || inventory[r.fuelId] < 1 || (r.inputId === r.fuelId && inventory[r.inputId] < 2)) { 
+                    btn.disabled = true; btn.innerText = '材料不足'; 
+                } else { 
+                    btn.onclick = () => { 
+                        loseItem(r.inputId, 1);
+                        loseItem(r.fuelId, 1);
+                        gainItem(r.outputId, r.outputQty);
+                    }; 
+                }
                 div.appendChild(text); div.appendChild(btn); container.appendChild(div);
             });
         }
 
         function updateInventoryUI() {
-            for(let i=1; i<=INVENTORY_SLOTS; i++) {
-                if(i === 12) continue; 
-                let slotLabel = document.getElementById(`count-${i}`);
-                if (slotLabel) slotLabel.innerText = inventory[i];
-                let slotDiv = document.getElementById(`slot-${i}`);
-                if (slotDiv) slotDiv.style.opacity = inventory[i] > 0 ? "1" : "0.4";
+            renderHotbar();
+            if (uiState === 'INVENTORY' || uiState === 'CRAFTING' || uiState === 'FURNACE') {
+                renderInventoryGrid();
             }
-            if(uiState === 'INVENTORY') renderCraftingMenu();
+            if (uiState === 'INVENTORY' || uiState === 'CRAFTING') renderCraftingMenu();
+            if (uiState === 'FURNACE') renderFurnaceMenu();
         }
-
-        const hotbarContainer = document.getElementById('hotbar-container');
-        for(let i=1; i<=INVENTORY_SLOTS; i++) {
-            if(i === 12) continue;
-            const slot = document.createElement('div'); 
-            slot.className = `hotbar-slot ${i === selectedSlot ? 'selected' : ''}`; slot.id = `slot-${i}`;
-            slot.appendChild(itemsDict[i].thumb); 
-            const lbl = document.createElement('span'); lbl.className = 'item-count'; lbl.id = `count-${i}`; lbl.innerText = inventory[i];
-            slot.appendChild(lbl); hotbarContainer.appendChild(slot);
-        }
-        
-        document.addEventListener('wheel', (e) => {
-            if (uiState !== 'GAME') return;
-            if (e.deltaY > 0) { selectedSlot++; if(selectedSlot === 12) selectedSlot = 13; if(selectedSlot > INVENTORY_SLOTS) selectedSlot = 1; }
-            else { selectedSlot--; if(selectedSlot === 12) selectedSlot = 11; if(selectedSlot < 1) selectedSlot = INVENTORY_SLOTS; }
-            for(let i=1; i<=INVENTORY_SLOTS; i++) { if(i!==12) document.getElementById('slot-'+i).classList.remove('selected'); }
-            document.getElementById('slot-'+selectedSlot).classList.add('selected');
-        });
 
         updateInventoryUI(); updateHealthUI(); updateHungerUI();
 
@@ -354,7 +493,12 @@
                         const mKey = getBlockKey(gx, gy, gz);
                         if (!activeMeshes.has(mKey)) {
                             const block = new THREE.Mesh(blockGeometry, itemsDict[b.typeId].mat);
-                            block.position.set(gx, gy, gz); block.userData = { typeId: b.typeId, cx: x, cz: z, y: b.y };
+                            block.position.set(gx, gy, gz); 
+                            const isFluid = (b.typeId === 14 || b.typeId === 15);
+                            block.userData = { 
+                                typeId: b.typeId, cx: x, cz: z, y: b.y, isFluid: isFluid,
+                                fluidType: b.typeId === 14 ? 'water' : (b.typeId === 15 ? 'lava' : null)
+                            };
                             scene.add(block); activeMeshes.set(mKey, block);
                         }
                     });
@@ -373,15 +517,35 @@
         function setUIState(state) {
             uiState = state;
             document.getElementById('pause-menu').style.display = uiState === 'PAUSE' ? 'flex' : 'none'; 
-            document.getElementById('inventory-menu').style.display = uiState === 'INVENTORY' ? 'flex' : 'none'; 
+            document.getElementById('interaction-menu').style.display = (uiState === 'INVENTORY' || uiState === 'CRAFTING' || uiState === 'FURNACE') ? 'flex' : 'none'; 
             document.getElementById('death-menu').style.display = uiState === 'DEATH' ? 'flex' : 'none';
             
+            document.getElementById('crafting-panel').style.display = 'none';
+            document.getElementById('furnace-panel').style.display = 'none';
+            document.getElementById('inventory-panel').style.display = 'none';
+
+            if (uiState === 'INVENTORY') {
+                document.getElementById('interact-title').innerText = '隨身背包';
+                document.getElementById('inventory-panel').style.display = 'block';
+                document.getElementById('crafting-panel').style.display = 'block';
+                document.getElementById('crafting-subtitle').innerText = '簡易合成：';
+            } else if (uiState === 'CRAFTING') {
+                document.getElementById('interact-title').innerText = '工作台';
+                document.getElementById('inventory-panel').style.display = 'block';
+                document.getElementById('crafting-panel').style.display = 'block';
+                document.getElementById('crafting-subtitle').innerText = '進階合成配方：';
+            } else if (uiState === 'FURNACE') {
+                document.getElementById('interact-title').innerText = '熔爐';
+                document.getElementById('inventory-panel').style.display = 'block';
+                document.getElementById('furnace-panel').style.display = 'block';
+            }
+
             if (uiState === 'GAME') {
-                try { controls.lock(); } catch(e) {} // 嘗試鎖定滑鼠，失敗也不會卡住
+                try { controls.lock(); } catch(e) {} 
             } else {
                 try { controls.unlock(); } catch(e) {}
             }
-            if (uiState === 'INVENTORY') renderCraftingMenu();
+            updateInventoryUI();
         }
 
         document.getElementById('resume-btn').addEventListener('click', () => setUIState('GAME'));
@@ -396,32 +560,48 @@
         controls.addEventListener('lock', () => { if(uiState !== 'GAME') setUIState('GAME'); });
         controls.addEventListener('unlock', () => { if (uiState === 'GAME') setUIState('PAUSE'); });
 
-        // 備援機制：當滑鼠無法鎖定時，允許按住左鍵拖曳旋轉視角
         let isDragging = false;
         let prevMousePos = { x: 0, y: 0 };
 
-        const move = { forward: false, backward: false, left: false, right: false };
+        const move = { forward: false, backward: false, left: false, right: false, jump: false };
         let velocity = new THREE.Vector3(), direction = new THREE.Vector3(), canJump = false, showF3 = false;
 
         document.addEventListener('keydown', (e) => {
             if (uiState !== 'GAME') return;
             if (e.code === 'KeyW') move.forward = true; if (e.code === 'KeyS') move.backward = true;
             if (e.code === 'KeyA') move.left = true; if (e.code === 'KeyD') move.right = true;
-            if (e.code === 'Space' && canJump) { velocity.y = 11; canJump = false; }
+            if (e.code === 'Space') {
+                move.jump = true;
+                if (canJump && !move.inFluid) { velocity.y = 11; canJump = false; }
+            }
             if (e.code === 'F3') { e.preventDefault(); showF3 = !showF3; document.getElementById('f3-menu').style.display = showF3 ? 'block' : 'none'; }
-            if (e.code === 'KeyE') { if (uiState === 'GAME') setUIState('INVENTORY'); else if (uiState === 'INVENTORY') setUIState('GAME'); }
+            if (e.code === 'KeyE') { if (uiState === 'GAME') setUIState('INVENTORY'); else setUIState('GAME'); }
+            
             if (e.key >= '1' && e.key <= '9') { 
-                selectedSlot = parseInt(e.key);
-                for(let i=1; i<=INVENTORY_SLOTS; i++) { if(i!==12) document.getElementById('slot-'+i).classList.remove('selected'); }
-                document.getElementById('slot-'+selectedSlot).classList.add('selected');
+                selectedHotbarIndex = parseInt(e.key) - 1; 
+                renderHotbar(); 
+            }
+            if (e.key === '0') { 
+                selectedHotbarIndex = 9; 
+                renderHotbar(); 
             }
         });
         document.addEventListener('keyup', (e) => {
             if (e.code === 'KeyW') move.forward = false; if (e.code === 'KeyS') move.backward = false;
             if (e.code === 'KeyA') move.left = false; if (e.code === 'KeyD') move.right = false;
+            if (e.code === 'Space') move.jump = false;
         });
 
-        // 動態視角拖曳監聽
+        document.addEventListener('wheel', (e) => {
+            if (uiState !== 'GAME') return;
+            if (e.deltaY > 0) {
+                selectedHotbarIndex = (selectedHotbarIndex + 1) % HOTBAR_SLOTS;
+            } else {
+                selectedHotbarIndex = (selectedHotbarIndex - 1 + HOTBAR_SLOTS) % HOTBAR_SLOTS;
+            }
+            renderHotbar();
+        });
+
         document.addEventListener('mousemove', (e) => {
             if (uiState !== 'GAME' || controls.isLocked || !isDragging) return;
             const deltaX = e.clientX - prevMousePos.x;
@@ -437,20 +617,13 @@
         document.addEventListener('mousedown', (e) => {
             if (uiState !== 'GAME') return;
             
-            // 如果沒鎖定滑鼠，記錄拖曳起點
             if (!controls.isLocked) {
                 isDragging = true;
                 prevMousePos = { x: e.clientX, y: e.clientY };
             }
 
-            if (e.button === 2 && selectedSlot === 13) {
-                if (hunger < 20 && inventory[13] > 0) {
-                    inventory[13]--; hunger = Math.min(20, hunger + 6); updateInventoryUI(); updateHungerUI();
-                }
-                return; 
-            }
+            const activeItemId = hotbar[selectedHotbarIndex];
 
-            // 精準映射：沒鎖定滑鼠時使用點擊位置進行射線判定，鎖定時使用中心點
             const mouseCoords = new THREE.Vector2();
             if (controls.isLocked) {
                 mouseCoords.set(0, 0);
@@ -466,13 +639,20 @@
             if (intersects.length > 0) {
                 const intersect = intersects[0]; const targetObj = intersect.object; 
 
+                // 使用合成台或熔爐判定
+                if (e.button === 2 && !isDragging) {
+                    if (targetObj.userData.typeId === 16) { setUIState('CRAFTING'); return; }
+                    if (targetObj.userData.typeId === 17) { setUIState('FURNACE'); return; }
+                }
+
+                // 生物攻擊判定
                 if (targetObj.userData.isMob) {
-                    if (e.button === 0 && !isDragging) { // 防止單純拖曳畫面變成砍豬
+                    if (e.button === 0 && !isDragging) { 
                         targetObj.userData.hp -= 5; targetObj.material.color.setHex(0xff0000); 
                         setTimeout(() => { if(targetObj.material) targetObj.material.color.setHex(0xffaacc); }, 200);
                         if (targetObj.userData.hp <= 0) { 
                             scene.remove(targetObj); mobs.splice(mobs.indexOf(targetObj), 1);
-                            inventory[13]++; updateInventoryUI();
+                            gainItem(13, 1);
                         }
                     }
                     return; 
@@ -480,27 +660,44 @@
 
                 const typeId = targetObj.userData.typeId;
                 if (e.button === 0) { 
+                    // 破壞方塊
                     if (typeId === 12) return; 
-                    if (inventory[typeId] !== undefined) { inventory[typeId]++; updateInventoryUI(); }
+                    if (inventory[typeId] !== undefined) { gainItem(typeId, 1); }
                     const mKey = getBlockKey(targetObj.position.x, targetObj.position.y, targetObj.position.z);
                     scene.remove(targetObj); activeMeshes.delete(mKey);
                     const list = worldData.get(`${targetObj.userData.cx},${targetObj.userData.cz}`);
                     if (list) { const idx = list.findIndex(b => b.y === targetObj.userData.y); if (idx > -1) list.splice(idx, 1); }
                     highlightBox.visible = false;
-                } else if (e.button === 2) { 
-                    if (inventory[selectedSlot] > 0 && selectedSlot !== 13) { 
+                } else if (e.button === 2 && !isDragging) { 
+                    // 放置方塊 (判斷不可放置的物品)
+                    if (activeItemId && inventory[activeItemId] > 0 && !UNPLACEABLE_ITEMS.includes(activeItemId)) { 
                         const normal = intersect.face.normal; const newPos = targetObj.position.clone().add(normal.clone().multiplyScalar(BLOCK_SIZE));
                         const pPos = controls.getObject().position;
                         if (Math.abs(newPos.x - pPos.x) < 1.4 && Math.abs(newPos.z - pPos.z) < 1.4 && newPos.y > pPos.y - 2.6 && newPos.y < pPos.y + 0.5) return; 
                         const ncx = Math.round(newPos.x / BLOCK_SIZE); const ncz = Math.round(newPos.z / BLOCK_SIZE); const nby = Math.round(newPos.y / BLOCK_SIZE);
                         if (!worldData.has(`${ncx},${ncz}`)) worldData.set(`${ncx},${ncz}`, []);
-                        worldData.get(`${ncx},${ncz}`).push({ y: nby, typeId: selectedSlot });
+                        worldData.get(`${ncx},${ncz}`).push({ y: nby, typeId: activeItemId });
                         const mKey = getBlockKey(newPos.x, newPos.y, newPos.z);
-                        const block = new THREE.Mesh(blockGeometry, itemsDict[selectedSlot].mat);
-                        block.position.copy(newPos); block.userData = { typeId: selectedSlot, cx: ncx, cz: ncz, y: nby };
+                        
+                        const isFluid = (activeItemId === 14 || activeItemId === 15);
+                        const block = new THREE.Mesh(blockGeometry, itemsDict[activeItemId].mat);
+                        block.position.copy(newPos); 
+                        block.userData = { 
+                            typeId: activeItemId, cx: ncx, cz: ncz, y: nby, isFluid: isFluid,
+                            fluidType: activeItemId === 14 ? 'water' : (activeItemId === 15 ? 'lava' : null)
+                        };
                         scene.add(block); activeMeshes.set(mKey, block);
-                        inventory[selectedSlot]--; updateInventoryUI();
+                        loseItem(activeItemId, 1);
                     }
+                }
+            }
+
+            // 🥩 獨立吃肉邏輯
+            if (e.button === 2 && !isDragging) {
+                if (activeItemId === 13 && hunger < 20 && inventory[13] > 0) {
+                    loseItem(13, 1); hunger = Math.min(20, hunger + 2); updateHungerUI();
+                } else if (activeItemId === 18 && hunger < 20 && inventory[18] > 0) {
+                    loseItem(18, 1); hunger = Math.min(20, hunger + 8); updateHungerUI();
                 }
             }
         });
@@ -533,7 +730,24 @@
                     else if (hunger >= 18 && health < maxHealth) { health++; updateHealthUI(); } 
                 }
 
-                if (!canJump) { if (playerObj.position.y > highestY || !wasInAir) highestY = playerObj.position.y; wasInAir = true; }
+                // 核心碰撞工具函式組
+                const bodyY1 = playerObj.position.y - 2.8; 
+                const bodyY2 = playerObj.position.y - 1.5; 
+                const bodyY3 = playerObj.position.y - 0.2; 
+                const bodyY4 = playerObj.position.y + 0.2; 
+
+                function getBlockAt(x, y, z) { return activeMeshes.get(getBlockKey(Math.round(x/BLOCK_SIZE)*BLOCK_SIZE, Math.round(y/BLOCK_SIZE)*BLOCK_SIZE, Math.round(z/BLOCK_SIZE)*BLOCK_SIZE)); }
+                function isWall(x, y, z) { const block = getBlockAt(x, y, z); return block && !block.userData.isFluid; }
+                function getFluidType(x, y, z) { const block = getBlockAt(x, y, z); return block && block.userData.isFluid ? block.userData.fluidType : null; }
+
+                const currentFluid = getFluidType(playerObj.position.x, bodyY2, playerObj.position.z) || getFluidType(playerObj.position.x, bodyY1, playerObj.position.z);
+                move.inFluid = !!currentFluid;
+
+                let speedMultiplier = 1.0;
+                if (currentFluid === 'water') speedMultiplier = 0.5;
+                if (currentFluid === 'lava')  speedMultiplier = 0.25;
+
+                if (!canJump && !currentFluid) { if (playerObj.position.y > highestY || !wasInAir) highestY = playerObj.position.y; wasInAir = true; }
 
                 velocity.x -= velocity.x * 10.0 * delta; velocity.z -= velocity.z * 10.0 * delta;
                 direction.z = Number(move.forward) - Number(move.backward); direction.x = Number(move.right) - Number(move.left); direction.normalize();
@@ -542,47 +756,40 @@
 
                 const nextX = playerObj.position.x - velocity.x * delta; const nextZ = playerObj.position.z - velocity.z * delta;
                 
-                const bodyY1 = playerObj.position.y - 2.8; // 腳底
-const bodyY2 = playerObj.position.y - 1.5; // 身體
-const bodyY3 = playerObj.position.y - 0.2; // 脖子
-const bodyY4 = playerObj.position.y + 0.2; // 頭頂
+                const hitWallX = isWall(nextX, bodyY1, playerObj.position.z) || isWall(nextX, bodyY2, playerObj.position.z) || isWall(nextX, bodyY3, playerObj.position.z) || isWall(nextX, bodyY4, playerObj.position.z);
+                const hitWallZ = isWall(playerObj.position.x, bodyY1, nextZ) || isWall(playerObj.position.x, bodyY2, nextZ) || isWall(playerObj.position.x, bodyY3, nextZ) || isWall(playerObj.position.x, bodyY4, nextZ);
 
-function isWall(x, y, z) { return activeMeshes.has(getBlockKey(Math.round(x/BLOCK_SIZE)*BLOCK_SIZE, Math.round(y/BLOCK_SIZE)*BLOCK_SIZE, Math.round(z/BLOCK_SIZE)*BLOCK_SIZE)); }
+                if (!hitWallX) controls.moveRight(-velocity.x * delta * speedMultiplier);
+                if (!hitWallZ) controls.moveForward(-velocity.z * delta * speedMultiplier);
 
-// 偵測 X 軸與 Z 軸是否撞牆
-const hitWallX = isWall(nextX, bodyY1, playerObj.position.z) || isWall(nextX, bodyY2, playerObj.position.z) || isWall(nextX, bodyY3, playerObj.position.z) || isWall(nextX, bodyY4, playerObj.position.z);
-const hitWallZ = isWall(playerObj.position.x, bodyY1, nextZ) || isWall(playerObj.position.x, bodyY2, nextZ) || isWall(playerObj.position.x, bodyY3, nextZ) || isWall(playerObj.position.x, bodyY4, nextZ);
+                if (!currentFluid && (hitWallX || hitWallZ) && canJump) {
+                    if (!isWall(playerObj.position.x, playerObj.position.y + 2.0, playerObj.position.z)) {
+                        velocity.y = 11; canJump = false;
+                    }
+                }
 
-// 如果沒撞牆，就正常移動
-if (!hitWallX) controls.moveRight(-velocity.x * delta);
-if (!hitWallZ) controls.moveForward(-velocity.z * delta);
+                if (currentFluid) {
+                    wasInAir = false; 
+                    const gravityEffect = currentFluid === 'water' ? 0.2 : 0.1;
+                    velocity.y -= 9.8 * 3.5 * delta * gravityEffect;
+                    const maxSinkSpeed = currentFluid === 'water' ? -2.5 : -1.0;
+                    if (velocity.y < maxSinkSpeed) velocity.y = maxSinkSpeed;
 
-// 🏃 新增：智慧自動上樓 (Auto-Jump)
-if ((hitWallX || hitWallZ) && canJump) {
-    // 確保頭頂上方有足夠的空間才自動跳躍，防止在矮洞穴裡無限撞頭
-    if (!isWall(playerObj.position.x, playerObj.position.y + 2.0, playerObj.position.z)) {
-        velocity.y = 11; // 觸發跳躍
-        canJump = false;
-    }
-}
+                    if (move.jump) { velocity.y = currentFluid === 'water' ? 3.5 : 1.2; }
+                } else {
+                    velocity.y -= 9.8 * 3.5 * delta; 
+                }
 
-// 處理重力與 Y 軸位移
-velocity.y -= 9.8 * 3.5 * delta; playerObj.position.y += velocity.y * delta;
+                playerObj.position.y += velocity.y * delta;
 
-// 🚧 保持：天花板防卡機制
-if (velocity.y > 0 && isWall(playerObj.position.x, playerObj.position.y + 1.1, playerObj.position.z)) {
-    velocity.y = -1; // 撞到天花板反彈
-    playerObj.position.y -= 0.1; 
-}
-                
-                function isWall(x, y, z) { return activeMeshes.has(getBlockKey(Math.round(x/BLOCK_SIZE)*BLOCK_SIZE, Math.round(y/BLOCK_SIZE)*BLOCK_SIZE, Math.round(z/BLOCK_SIZE)*BLOCK_SIZE)); }
-                
-                if (!isWall(nextX, bodyY1, playerObj.position.z) && !isWall(nextX, bodyY2, playerObj.position.z) && !isWall(nextX, bodyY3, playerObj.position.z)) controls.moveRight(-velocity.x * delta);
-                if (!isWall(playerObj.position.x, bodyY1, nextZ) && !isWall(playerObj.position.x, bodyY2, nextZ) && !isWall(playerObj.position.x, bodyY3, nextZ)) controls.moveForward(-velocity.z * delta);
+                if (velocity.y > 0 && isWall(playerObj.position.x, playerObj.position.y + 1.1, playerObj.position.z)) {
+                    velocity.y = -1; playerObj.position.y -= 0.1; 
+                }
 
-                velocity.y -= 9.8 * 3.5 * delta; playerObj.position.y += velocity.y * delta;
                 downRay.set(playerObj.position, new THREE.Vector3(0, -1, 0)); downRay.far = 5;
-                const floorIntersects = downRay.intersectObjects(Array.from(activeMeshes.values())); canJump = false;
+                const solidMeshes = Array.from(activeMeshes.values()).filter(m => !m.userData.isFluid);
+                const floorIntersects = downRay.intersectObjects(solidMeshes); 
+                canJump = false;
 
                 if (floorIntersects.length > 0 && playerObj.position.y <= floorIntersects[0].point.y + 3) {
                     velocity.y = Math.max(0, velocity.y); playerObj.position.y = floorIntersects[0].point.y + 3; canJump = true;
@@ -595,7 +802,6 @@ if (velocity.y > 0 && isWall(playerObj.position.x, playerObj.position.y + 1.1, p
                 
                 if (playerObj.position.y < -90) { takeDamage(20); if (health > 0) { playerObj.position.set(0, getSurfaceHeight(0, 0)+2.9, 0); velocity.set(0, 0, 0); wasInAir = false; updateTerrain(); } }
 
-                // 亮框預覽核心射線
                 const mouseCoords = new THREE.Vector2();
                 if (controls.isLocked) mouseCoords.set(0, 0);
                 else mouseCoords.set((prevMousePos.x / window.innerWidth) * 2 - 1, -(prevMousePos.y / window.innerHeight) * 2 + 1);
