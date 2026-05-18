@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minecraft Java Edition Web Clone</title>
+    <title>Minecraft Infinite Web Clone</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: 'Courier New', monospace; user-select: none; }
         
         #f3-menu {
-            position: absolute; top: 0; left: 0; color: #ddd; background: rgba(0, 0, 0, 0.4);
+            position: absolute; top: 0; left: 0; color: #ddd; background: rgba(0, 0, 0, 0.5);
             padding: 10px; font-size: 14px; pointer-events: none; display: none; z-index: 20; line-height: 1.4;
         }
 
@@ -17,30 +17,31 @@
             transform: translate(-50%, -50%); pointer-events: none; z-index: 10;
         }
         #crosshair::before, #crosshair::after {
-            content: ''; position: absolute; background: rgba(210, 210, 210, 0.9); mix-blend-mode: difference;
+            content: ''; position: absolute; background: rgba(255, 255, 255, 0.9); mix-blend-mode: difference;
         }
         #crosshair::before { top: 7px; left: 0; width: 16px; height: 2px; }
         #crosshair::after { top: 0; left: 7px; width: 2px; height: 16px; }
 
         #hotbar-container {
             position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
-            display: flex; background: rgba(30, 30, 30, 0.6); border: 2px solid #111; padding: 2px; gap: 2px; z-index: 10;
+            display: flex; background: rgba(30, 30, 30, 0.7); border: 2px solid #111; padding: 2px; gap: 2px; z-index: 10;
         }
         .hotbar-slot {
             width: 44px; height: 44px; background: rgba(139, 139, 139, 0.8); border: 2px solid #555;
             display: flex; align-items: center; justify-content: center; box-shadow: inset 2px 2px 0px rgba(255,255,255,0.4), inset -2px -2px 0px rgba(0,0,0,0.4);
         }
-        .hotbar-slot.selected { border: 2px solid white; box-shadow: 0 0 5px rgba(255,255,255,0.8); }
-        .hotbar-slot canvas { width: 32px; height: 32px; image-rendering: pixelated; } /* 顯示材質預覽 */
+        .hotbar-slot.selected { border: 2px solid white; box-shadow: 0 0 8px rgba(255,255,255,0.8); }
+        .hotbar-slot canvas { width: 32px; height: 32px; image-rendering: pixelated; }
 
         #pause-menu {
             position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: rgba(0, 0, 0, 0.6); color: white; display: flex; flex-direction: column;
+            background: rgba(0, 0, 0, 0.7); color: white; display: flex; flex-direction: column;
             align-items: center; justify-content: center; z-index: 50; cursor: pointer;
         }
         .title { font-size: 40px; margin-bottom: 20px; color: #fff; text-shadow: 3px 3px 0 #000; }
         .btn { padding: 10px 40px; background: #c6c6c6; border: 2px solid #000; border-top-color: #fff; border-left-color: #fff; color: #000; font-size: 20px; }
         .btn:hover { background: #9999ff; }
+        .loading { font-size: 16px; color: #aaa; margin-top: 15px; }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
@@ -48,7 +49,8 @@
 <body>
 
     <div id="f3-menu">
-        Minecraft Web Clone - Ultimate<br>FPS: <span id="fps-counter">0</span><br><br>
+        Minecraft Infinite Web Clone<br>FPS: <span id="fps-counter">0</span><br>
+        Active Blocks: <span id="block-counter">0</span><br><br>
         XYZ: <span id="debug-xyz">0 / 0 / 0</span><br>
         Targeted Block: <span id="debug-target">None</span>
     </div>
@@ -63,37 +65,38 @@
     <div id="pause-menu">
         <div class="title">Game Menu</div>
         <div class="btn">Back to Game</div>
-        <p style="margin-top: 20px; color: #ccc;">(點擊畫面以鎖定滑鼠並開始遊玩)</p>
+        <p class="loading">進入遊戲後，系統會在你周圍自動生成無限地圖</p>
     </div>
 
     <script>
+        // --- 1. 基本場景與濃霧設定 ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x87CEEB);
-        scene.fog = new THREE.FogExp2(0x87CEEB, 0.015);
+        // 🔥 加入濃霧：為了掩蓋遠處正在生成的方塊，這是無限地圖的必備技巧
+        scene.fog = new THREE.Fog(0x87CEEB, 20, 60); 
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias: false }); // 關閉平滑以保留像素感
+        const renderer = new THREE.WebGLRenderer({ antialias: false });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         document.body.appendChild(renderer.domElement);
 
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
         scene.add(ambientLight);
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
         dirLight.position.set(50, 100, 50);
         dirLight.castShadow = true;
         scene.add(dirLight);
 
-        // --- 1. 自動生成麥塊 16x16 像素材質 ---
+        // --- 2. 像素材質生成器 ---
         function generateTexture(type) {
             const canvas = document.createElement('canvas');
             canvas.width = 16; canvas.height = 16;
             const ctx = canvas.getContext('2d');
 
-            function drawNoise(baseColor, variance) {
-                ctx.fillStyle = baseColor;
-                ctx.fillRect(0, 0, 16, 16);
+            function drawNoise(base, variance) {
+                ctx.fillStyle = base; ctx.fillRect(0, 0, 16, 16);
                 for(let i=0; i<256; i++) {
                     const r = Math.random() * variance - variance/2;
                     ctx.fillStyle = `rgba(0,0,0,${Math.abs(r)})`;
@@ -104,18 +107,15 @@
             if (type === 'dirt') drawNoise('#684A33', 0.2);
             else if (type === 'grass_top') drawNoise('#5B8731', 0.15);
             else if (type === 'grass_side') {
-                drawNoise('#684A33', 0.2); // 底層泥土
+                drawNoise('#684A33', 0.2);
                 ctx.fillStyle = '#5B8731';
-                for(let x=0; x<16; x++) {
-                    let depth = 3 + Math.floor(Math.random() * 3); // 隨機草皮邊緣
-                    ctx.fillRect(x, 0, 1, depth);
-                }
+                for(let x=0; x<16; x++) ctx.fillRect(x, 0, 1, 3 + Math.floor(Math.random()*3));
             }
             else if (type === 'stone') drawNoise('#7D7D7D', 0.1);
             else if (type === 'wood') {
                 drawNoise('#9A7441', 0.1);
                 ctx.fillStyle = 'rgba(0,0,0,0.1)';
-                for(let x=0; x<16; x+=4) ctx.fillRect(x, 0, 1, 16); // 木板紋路
+                for(let x=0; x<16; x+=4) ctx.fillRect(x, 0, 1, 16);
             }
             else if (type === 'glass') {
                 ctx.fillStyle = 'rgba(200, 240, 255, 0.3)'; ctx.fillRect(0, 0, 16, 16);
@@ -123,52 +123,46 @@
             }
 
             const texture = new THREE.CanvasTexture(canvas);
-            texture.magFilter = THREE.NearestFilter; // 🔥 關鍵：讓材質保持銳利像素感
+            texture.magFilter = THREE.NearestFilter; 
             return { tex: texture, canvas: canvas };
         }
 
         const texDirt = generateTexture('dirt').tex;
-        const texGrassTop = generateTexture('grass_top').tex;
-        const texGrassSide = generateTexture('grass_side').tex;
-        const texStone = generateTexture('stone').tex;
-        const texWood = generateTexture('wood').tex;
-        const texGlass = generateTexture('glass').tex;
-
         const matDirt = new THREE.MeshStandardMaterial({ map: texDirt });
-        const matStone = new THREE.MeshStandardMaterial({ map: texStone });
-        const matWood = new THREE.MeshStandardMaterial({ map: texWood });
-        const matGlass = new THREE.MeshStandardMaterial({ map: texGlass, transparent: true, opacity: 0.8 });
         const matGrassBlock = [
-            new THREE.MeshStandardMaterial({ map: texGrassSide }), // 右
-            new THREE.MeshStandardMaterial({ map: texGrassSide }), // 左
-            new THREE.MeshStandardMaterial({ map: texGrassTop }),  // 上
-            matDirt,                                               // 下
-            new THREE.MeshStandardMaterial({ map: texGrassSide }), // 前
-            new THREE.MeshStandardMaterial({ map: texGrassSide })  // 後
+            new THREE.MeshStandardMaterial({ map: generateTexture('grass_side').tex }),
+            new THREE.MeshStandardMaterial({ map: generateTexture('grass_side').tex }),
+            new THREE.MeshStandardMaterial({ map: generateTexture('grass_top').tex }),
+            matDirt,
+            new THREE.MeshStandardMaterial({ map: generateTexture('grass_side').tex }),
+            new THREE.MeshStandardMaterial({ map: generateTexture('grass_side').tex })
         ];
 
         const materialsDict = {
             1: { mat: matGrassBlock, name: "Grass Block", thumb: generateTexture('grass_side').canvas },
             2: { mat: matDirt, name: "Dirt", thumb: generateTexture('dirt').canvas },
-            3: { mat: matStone, name: "Stone", thumb: generateTexture('stone').canvas },
-            4: { mat: matWood, name: "Wooden Planks", thumb: generateTexture('wood').canvas },
-            5: { mat: matGlass, name: "Glass", thumb: generateTexture('glass').canvas }
+            3: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('stone').tex }), name: "Stone", thumb: generateTexture('stone').canvas },
+            4: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('wood').tex }), name: "Wooden Planks", thumb: generateTexture('wood').canvas },
+            5: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('glass').tex, transparent: true, opacity: 0.8 }), name: "Glass", thumb: generateTexture('glass').canvas }
         };
 
-        // 將預覽圖放進快捷列
         for(let i=1; i<=5; i++) document.getElementById('slot-'+i).appendChild(materialsDict[i].thumb);
 
-        // --- 2. 物理世界與地形生成 ---
+        // --- 3. 動態無限地形系統 (核心更新) ---
         const BLOCK_SIZE = 2;
         const worldBlocks = [];
-        const worldMap = new Map(); // 用 Map 加速碰撞偵測
+        const worldMap = new Map(); 
+        const generatedColumns = new Set(); // 記錄哪些直行已經生成過了
         const blockGeometry = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+        
+        // 渲染距離 (半徑方塊數，數字越大看越遠，但效能越低)
+        const RENDER_RADIUS = 18; 
 
         function getBlockKey(x, y, z) { return `${Math.round(x)},${Math.round(y)},${Math.round(z)}`; }
 
         function createBlock(x, y, z, typeId) {
             const key = getBlockKey(x, y, z);
-            if (worldMap.has(key)) return; // 避免方塊重疊
+            if (worldMap.has(key)) return; 
 
             const block = new THREE.Mesh(blockGeometry, materialsDict[typeId].mat);
             block.position.set(x, y, z);
@@ -180,29 +174,53 @@
             worldMap.set(key, block);
         }
 
-        // 簡單的柏林雜訊地形生成 (使用 Sine 波模擬高低起伏)
-        const WORLD_SIZE = 24;
-        for (let x = -WORLD_SIZE; x < WORLD_SIZE; x++) {
-            for (let z = -WORLD_SIZE; z < WORLD_SIZE; z++) {
-                // 地形起伏演算法
-                let height = Math.floor((Math.sin(x/6) + Math.cos(z/5)) * 2);
-                
-                createBlock(x * BLOCK_SIZE, height * BLOCK_SIZE, z * BLOCK_SIZE, 1); // 草皮
-                createBlock(x * BLOCK_SIZE, (height - 1) * BLOCK_SIZE, z * BLOCK_SIZE, 2); // 泥土
-                for(let y = height - 2; y > height - 5; y--) {
-                    createBlock(x * BLOCK_SIZE, y * BLOCK_SIZE, z * BLOCK_SIZE, 3); // 石頭
+        // 🔥 自動加載地形函數
+        function updateTerrain() {
+            const px = Math.round(controls.getObject().position.x / BLOCK_SIZE);
+            const pz = Math.round(controls.getObject().position.z / BLOCK_SIZE);
+
+            // 1. 生成玩家周圍的地形
+            for (let x = px - RENDER_RADIUS; x <= px + RENDER_RADIUS; x++) {
+                for (let z = pz - RENDER_RADIUS; z <= pz + RENDER_RADIUS; z++) {
+                    const colKey = `${x},${z}`;
+                    
+                    // 如果這個座標還沒長出方塊，就透過演算法生成
+                    if (!generatedColumns.has(colKey)) {
+                        generatedColumns.add(colKey);
+                        
+                        // 讓地形高低起伏的數學演算法 (結合了三種波長產生隨機感)
+                        let height = Math.floor((Math.sin(x/8) + Math.cos(z/10) + Math.sin((x+z)/14)) * 2.5);
+                        
+                        // 只生成表層與地底兩層，節省網頁效能
+                        createBlock(x * BLOCK_SIZE, height * BLOCK_SIZE, z * BLOCK_SIZE, 1);     // 草地
+                        createBlock(x * BLOCK_SIZE, (height - 1) * BLOCK_SIZE, z * BLOCK_SIZE, 2); // 泥土
+                        createBlock(x * BLOCK_SIZE, (height - 2) * BLOCK_SIZE, z * BLOCK_SIZE, 3); // 石頭
+                    }
                 }
             }
+
+            // 2. 動態隱藏/顯示方塊 (效能優化關鍵)
+            let activeCount = 0;
+            worldMap.forEach((block) => {
+                const dist = Math.sqrt(Math.pow(block.position.x/BLOCK_SIZE - px, 2) + Math.pow(block.position.z/BLOCK_SIZE - pz, 2));
+                // 如果方塊距離玩家太遠，就暫時隱藏它，減輕顯卡負擔
+                if (dist > RENDER_RADIUS) {
+                    block.visible = false;
+                } else {
+                    block.visible = true;
+                    activeCount++;
+                }
+            });
+            document.getElementById('block-counter').innerText = activeCount;
         }
 
-        // 黑線高亮框
         const outlineGeo = new THREE.EdgesGeometry(blockGeometry);
         const outlineMat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 });
         const highlightBox = new THREE.LineSegments(outlineGeo, outlineMat);
         highlightBox.visible = false;
         scene.add(highlightBox);
 
-        // --- 3. 玩家控制 ---
+        // --- 4. 玩家控制 ---
         const controls = new THREE.PointerLockControls(camera, document.body);
         const pauseMenu = document.getElementById('pause-menu');
 
@@ -211,7 +229,7 @@
         controls.addEventListener('unlock', () => pauseMenu.style.display = 'flex');
         scene.add(controls.getObject());
 
-        controls.getObject().position.set(0, 20, 0); // 讓玩家從空中掉下來
+        controls.getObject().position.set(0, 30, 0); // 初始從高空落下，讓系統有時間生成地板
 
         const move = { forward: false, backward: false, left: false, right: false };
         let velocity = new THREE.Vector3();
@@ -241,7 +259,7 @@
             if (e.code === 'KeyD') move.right = false;
         });
 
-        // 破壞與放置方塊
+        // 破壞與放置
         const raycaster = new THREE.Raycaster();
         const centerMouse = new THREE.Vector2(0, 0);
 
@@ -249,45 +267,52 @@
             if (!controls.isLocked) return;
             raycaster.setFromCamera(centerMouse, camera);
             raycaster.far = 10;
-            const intersects = raycaster.intersectObjects(worldBlocks);
+            const intersects = raycaster.intersectObjects(worldBlocks.filter(b => b.visible)); // 只偵測可見方塊
 
             if (intersects.length > 0) {
                 const intersect = intersects[0];
-                if (e.button === 0) { // 左鍵挖掉
+                if (e.button === 0) { 
                     scene.remove(intersect.object);
                     const index = worldBlocks.indexOf(intersect.object);
                     if (index > -1) worldBlocks.splice(index, 1);
                     worldMap.delete(getBlockKey(intersect.object.position.x, intersect.object.position.y, intersect.object.position.z));
                     highlightBox.visible = false;
-                } else if (e.button === 2) { // 右鍵放置
+                } else if (e.button === 2) { 
                     const normal = intersect.face.normal;
                     const newPos = intersect.object.position.clone().add(normal.clone().multiplyScalar(BLOCK_SIZE));
-                    
-                    // 防呆：避免蓋在自己身體裡
                     const pPos = controls.getObject().position;
                     if (Math.abs(newPos.x - pPos.x) < 1.5 && Math.abs(newPos.z - pPos.z) < 1.5 && newPos.y > pPos.y - 3 && newPos.y < pPos.y + 1) return;
                     createBlock(newPos.x, newPos.y, newPos.z, selectedSlot);
+                    
+                    // 手動放置的方塊也要標記該直行已生成，免得被系統刷掉
+                    generatedColumns.add(`${Math.round(newPos.x/BLOCK_SIZE)},${Math.round(newPos.z/BLOCK_SIZE)}`);
                 }
             }
         });
 
-        // --- 4. 遊戲主迴圈與真實物理 ---
+        // --- 5. 遊戲主迴圈 ---
         const clock = new THREE.Clock();
-        const downRay = new THREE.Raycaster(); // 向下射線用來偵測地板
+        const downRay = new THREE.Raycaster(); 
         let frames = 0, lastTime = performance.now();
+
+        // 啟動時先算一次地形
+        updateTerrain();
 
         function animate() {
             requestAnimationFrame(animate);
 
-            // FPS
             frames++; const timeNow = performance.now();
             if (timeNow >= lastTime + 1000) { document.getElementById('fps-counter').innerText = frames; frames = 0; lastTime = timeNow; }
 
+            // 🔥 每 10 幀檢查並更新一次地形 (避免每幀計算卡頓)
+            if (frames % 10 === 0 && controls.isLocked) {
+                updateTerrain();
+            }
+
             if (controls.isLocked) {
-                const delta = Math.min(clock.getDelta(), 0.1); // 防止切換視窗時破圖
+                const delta = Math.min(clock.getDelta(), 0.1); 
                 const playerObj = controls.getObject();
 
-                // 水平物理與移動
                 velocity.x -= velocity.x * 10.0 * delta;
                 velocity.z -= velocity.z * 10.0 * delta;
                 direction.z = Number(move.forward) - Number(move.backward);
@@ -298,13 +323,12 @@
                 if (move.forward || move.backward) velocity.z -= direction.z * speed * delta;
                 if (move.left || move.right) velocity.x -= direction.x * speed * delta;
 
-                // 簡單防穿牆 (側邊碰撞測試)
+                // 防穿牆碰撞測試
                 const nextX = playerObj.position.x - velocity.x * delta;
                 const nextZ = playerObj.position.z - velocity.z * delta;
-                const bodyY1 = playerObj.position.y - 1.5; // 腳的位置
-                const bodyY2 = playerObj.position.y - 0.5; // 身體的位置
+                const bodyY1 = playerObj.position.y - 1.5; 
+                const bodyY2 = playerObj.position.y - 0.5; 
 
-                // 粗略偵測周圍方塊是否存在
                 function isWall(x, y, z) {
                     const bx = Math.round(x / BLOCK_SIZE) * BLOCK_SIZE;
                     const by = Math.round(y / BLOCK_SIZE) * BLOCK_SIZE;
@@ -319,35 +343,33 @@
                     controls.moveForward(-velocity.z * delta);
                 }
 
-                // 垂直物理 (重力與跳躍)
                 velocity.y -= 9.8 * 4.0 * delta; 
                 playerObj.position.y += velocity.y * delta;
 
-                // 向下地板偵測
+                // 地板偵測
                 downRay.set(playerObj.position, new THREE.Vector3(0, -1, 0));
                 downRay.far = 10;
-                const floorIntersects = downRay.intersectObjects(worldBlocks);
+                const floorIntersects = downRay.intersectObjects(worldBlocks.filter(b => b.visible));
                 
                 canJump = false;
                 if (floorIntersects.length > 0) {
                     const floorY = floorIntersects[0].point.y;
-                    // 玩家高度大約是 3 單位
                     if (playerObj.position.y <= floorY + 3) {
-                        velocity.y = Math.max(0, velocity.y); // 停止下墜
+                        velocity.y = Math.max(0, velocity.y); 
                         playerObj.position.y = floorY + 3;
                         canJump = true;
                     }
                 }
 
                 // 掉入虛空保護
-                if (playerObj.position.y < -20) {
-                    velocity.y = 0; playerObj.position.set(0, 20, 0);
+                if (playerObj.position.y < -30) {
+                    velocity.y = 0; 
+                    playerObj.position.y = 30; // 傳送回空中
                 }
 
-                // 視線高亮與 F3
                 raycaster.setFromCamera(centerMouse, camera);
                 raycaster.far = 10;
-                const intersects = raycaster.intersectObjects(worldBlocks);
+                const intersects = raycaster.intersectObjects(worldBlocks.filter(b => b.visible));
                 if (intersects.length > 0) {
                     highlightBox.position.copy(intersects[0].object.position);
                     highlightBox.visible = true;
