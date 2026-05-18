@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minecraft Infinite Web Clone</title>
+    <title>Minecraft Infinite with Bedrock</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: 'Courier New', monospace; user-select: none; }
         
@@ -65,14 +65,12 @@
     <div id="pause-menu">
         <div class="title">Game Menu</div>
         <div class="btn">Back to Game</div>
-        <p class="loading">進入遊戲後，系統會在你周圍自動生成無限地圖</p>
+        <p class="loading">進入遊戲後，往下挖即可看到「無法破壞的基岩層」！</p>
     </div>
 
     <script>
-        // --- 1. 基本場景與濃霧設定 ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x87CEEB);
-        // 🔥 加入濃霧：為了掩蓋遠處正在生成的方塊，這是無限地圖的必備技巧
         scene.fog = new THREE.Fog(0x87CEEB, 20, 60); 
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -89,7 +87,7 @@
         dirLight.castShadow = true;
         scene.add(dirLight);
 
-        // --- 2. 像素材質生成器 ---
+        // --- 1. 像素材質生成器 (新增基岩) ---
         function generateTexture(type) {
             const canvas = document.createElement('canvas');
             canvas.width = 16; canvas.height = 16;
@@ -121,6 +119,14 @@
                 ctx.fillStyle = 'rgba(200, 240, 255, 0.3)'; ctx.fillRect(0, 0, 16, 16);
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'; ctx.fillRect(1, 1, 14, 1); ctx.fillRect(1, 1, 1, 14);
             }
+            // 🔥 基岩材質：深灰色基底配上黑色顆粒紋路
+            else if (type === 'bedrock') {
+                drawNoise('#2e2e2e', 0.4);
+                ctx.fillStyle = '#141414';
+                for(let i=0; i<25; i++) {
+                    ctx.fillRect(Math.floor(Math.random()*15), Math.floor(Math.random()*15), 2, 2);
+                }
+            }
 
             const texture = new THREE.CanvasTexture(canvas);
             texture.magFilter = THREE.NearestFilter; 
@@ -143,19 +149,19 @@
             2: { mat: matDirt, name: "Dirt", thumb: generateTexture('dirt').canvas },
             3: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('stone').tex }), name: "Stone", thumb: generateTexture('stone').canvas },
             4: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('wood').tex }), name: "Wooden Planks", thumb: generateTexture('wood').canvas },
-            5: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('glass').tex, transparent: true, opacity: 0.8 }), name: "Glass", thumb: generateTexture('glass').canvas }
+            5: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('glass').tex, transparent: true, opacity: 0.8 }), name: "Glass", thumb: generateTexture('glass').canvas },
+            6: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('bedrock').tex }), name: "Bedrock" } // 系統內部代碼 6 為基岩
         };
 
         for(let i=1; i<=5; i++) document.getElementById('slot-'+i).appendChild(materialsDict[i].thumb);
 
-        // --- 3. 動態無限地形系統 (核心更新) ---
+        // --- 2. 無限地形與地底基岩系統 ---
         const BLOCK_SIZE = 2;
         const worldBlocks = [];
         const worldMap = new Map(); 
-        const generatedColumns = new Set(); // 記錄哪些直行已經生成過了
+        const generatedColumns = new Set(); 
         const blockGeometry = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
         
-        // 渲染距離 (半徑方塊數，數字越大看越遠，但效能越低)
         const RENDER_RADIUS = 18; 
 
         function getBlockKey(x, y, z) { return `${Math.round(x)},${Math.round(y)},${Math.round(z)}`; }
@@ -174,36 +180,33 @@
             worldMap.set(key, block);
         }
 
-        // 🔥 自動加載地形函數
         function updateTerrain() {
             const px = Math.round(controls.getObject().position.x / BLOCK_SIZE);
             const pz = Math.round(controls.getObject().position.z / BLOCK_SIZE);
 
-            // 1. 生成玩家周圍的地形
             for (let x = px - RENDER_RADIUS; x <= px + RENDER_RADIUS; x++) {
                 for (let z = pz - RENDER_RADIUS; z <= pz + RENDER_RADIUS; z++) {
                     const colKey = `${x},${z}`;
                     
-                    // 如果這個座標還沒長出方塊，就透過演算法生成
                     if (!generatedColumns.has(colKey)) {
                         generatedColumns.add(colKey);
                         
-                        // 讓地形高低起伏的數學演算法 (結合了三種波長產生隨機感)
                         let height = Math.floor((Math.sin(x/8) + Math.cos(z/10) + Math.sin((x+z)/14)) * 2.5);
                         
-                        // 只生成表層與地底兩層，節省網頁效能
-                        createBlock(x * BLOCK_SIZE, height * BLOCK_SIZE, z * BLOCK_SIZE, 1);     // 草地
-                        createBlock(x * BLOCK_SIZE, (height - 1) * BLOCK_SIZE, z * BLOCK_SIZE, 2); // 泥土
-                        createBlock(x * BLOCK_SIZE, (height - 2) * BLOCK_SIZE, z * BLOCK_SIZE, 3); // 石頭
+                        // 生成地層結構
+                        createBlock(x * BLOCK_SIZE, height * BLOCK_SIZE, z * BLOCK_SIZE, 1);     // 地表：草地
+                        createBlock(x * BLOCK_SIZE, (height - 1) * BLOCK_SIZE, z * BLOCK_SIZE, 2); // 中層：泥土
+                        createBlock(x * BLOCK_SIZE, (height - 2) * BLOCK_SIZE, z * BLOCK_SIZE, 3); // 深層：石頭
+                        
+                        // 🔥 關鍵：在石頭下方直接鋪上一層「基岩 (TypeID: 6)」
+                        createBlock(x * BLOCK_SIZE, (height - 3) * BLOCK_SIZE, z * BLOCK_SIZE, 6); 
                     }
                 }
             }
 
-            // 2. 動態隱藏/顯示方塊 (效能優化關鍵)
             let activeCount = 0;
             worldMap.forEach((block) => {
                 const dist = Math.sqrt(Math.pow(block.position.x/BLOCK_SIZE - px, 2) + Math.pow(block.position.z/BLOCK_SIZE - pz, 2));
-                // 如果方塊距離玩家太遠，就暫時隱藏它，減輕顯卡負擔
                 if (dist > RENDER_RADIUS) {
                     block.visible = false;
                 } else {
@@ -220,7 +223,7 @@
         highlightBox.visible = false;
         scene.add(highlightBox);
 
-        // --- 4. 玩家控制 ---
+        // --- 3. 玩家控制 ---
         const controls = new THREE.PointerLockControls(camera, document.body);
         const pauseMenu = document.getElementById('pause-menu');
 
@@ -229,7 +232,7 @@
         controls.addEventListener('unlock', () => pauseMenu.style.display = 'flex');
         scene.add(controls.getObject());
 
-        controls.getObject().position.set(0, 30, 0); // 初始從高空落下，讓系統有時間生成地板
+        controls.getObject().position.set(0, 30, 0); 
 
         const move = { forward: false, backward: false, left: false, right: false };
         let velocity = new THREE.Vector3();
@@ -259,7 +262,7 @@
             if (e.code === 'KeyD') move.right = false;
         });
 
-        // 破壞與放置
+        // 互動：破壞與放置
         const raycaster = new THREE.Raycaster();
         const centerMouse = new THREE.Vector2(0, 0);
 
@@ -267,11 +270,17 @@
             if (!controls.isLocked) return;
             raycaster.setFromCamera(centerMouse, camera);
             raycaster.far = 10;
-            const intersects = raycaster.intersectObjects(worldBlocks.filter(b => b.visible)); // 只偵測可見方塊
+            const intersects = raycaster.intersectObjects(worldBlocks.filter(b => b.visible)); 
 
             if (intersects.length > 0) {
                 const intersect = intersects[0];
                 if (e.button === 0) { 
+                    // 🔥 核心防護：如果點到的是基岩 (typeId === 6)，直接攔截，不允許刪除！
+                    if (intersect.object.userData.typeId === 6) {
+                        console.log("基岩是無法被破壞的！");
+                        return; 
+                    }
+
                     scene.remove(intersect.object);
                     const index = worldBlocks.indexOf(intersect.object);
                     if (index > -1) worldBlocks.splice(index, 1);
@@ -283,19 +292,16 @@
                     const pPos = controls.getObject().position;
                     if (Math.abs(newPos.x - pPos.x) < 1.5 && Math.abs(newPos.z - pPos.z) < 1.5 && newPos.y > pPos.y - 3 && newPos.y < pPos.y + 1) return;
                     createBlock(newPos.x, newPos.y, newPos.z, selectedSlot);
-                    
-                    // 手動放置的方塊也要標記該直行已生成，免得被系統刷掉
                     generatedColumns.add(`${Math.round(newPos.x/BLOCK_SIZE)},${Math.round(newPos.z/BLOCK_SIZE)}`);
                 }
             }
         });
 
-        // --- 5. 遊戲主迴圈 ---
+        // --- 4. 遊戲主迴圈 ---
         const clock = new THREE.Clock();
         const downRay = new THREE.Raycaster(); 
         let frames = 0, lastTime = performance.now();
 
-        // 啟動時先算一次地形
         updateTerrain();
 
         function animate() {
@@ -304,7 +310,6 @@
             frames++; const timeNow = performance.now();
             if (timeNow >= lastTime + 1000) { document.getElementById('fps-counter').innerText = frames; frames = 0; lastTime = timeNow; }
 
-            // 🔥 每 10 幀檢查並更新一次地形 (避免每幀計算卡頓)
             if (frames % 10 === 0 && controls.isLocked) {
                 updateTerrain();
             }
@@ -323,7 +328,7 @@
                 if (move.forward || move.backward) velocity.z -= direction.z * speed * delta;
                 if (move.left || move.right) velocity.x -= direction.x * speed * delta;
 
-                // 防穿牆碰撞測試
+                // 防穿牆
                 const nextX = playerObj.position.x - velocity.x * delta;
                 const nextZ = playerObj.position.z - velocity.z * delta;
                 const bodyY1 = playerObj.position.y - 1.5; 
@@ -346,7 +351,7 @@
                 velocity.y -= 9.8 * 4.0 * delta; 
                 playerObj.position.y += velocity.y * delta;
 
-                // 地板偵測
+                // 地板與基岩碰撞偵測 (站立在基岩上)
                 downRay.set(playerObj.position, new THREE.Vector3(0, -1, 0));
                 downRay.far = 10;
                 const floorIntersects = downRay.intersectObjects(worldBlocks.filter(b => b.visible));
@@ -361,10 +366,10 @@
                     }
                 }
 
-                // 掉入虛空保護
-                if (playerObj.position.y < -30) {
+                // 虛空保護 (以防萬一卡 Bug 穿過基岩)
+                if (playerObj.position.y < -40) {
                     velocity.y = 0; 
-                    playerObj.position.y = 30; // 傳送回空中
+                    playerObj.position.y = 30; 
                 }
 
                 raycaster.setFromCamera(centerMouse, camera);
