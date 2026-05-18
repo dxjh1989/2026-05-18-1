@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minecraft Infinite with Bedrock</title>
+    <title>Minecraft Web - Survival Mode</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: 'Courier New', monospace; user-select: none; }
         
@@ -27,21 +27,30 @@
             display: flex; background: rgba(30, 30, 30, 0.7); border: 2px solid #111; padding: 2px; gap: 2px; z-index: 10;
         }
         .hotbar-slot {
-            width: 44px; height: 44px; background: rgba(139, 139, 139, 0.8); border: 2px solid #555;
+            position: relative; width: 44px; height: 44px; background: rgba(139, 139, 139, 0.8); border: 2px solid #555;
             display: flex; align-items: center; justify-content: center; box-shadow: inset 2px 2px 0px rgba(255,255,255,0.4), inset -2px -2px 0px rgba(0,0,0,0.4);
         }
         .hotbar-slot.selected { border: 2px solid white; box-shadow: 0 0 8px rgba(255,255,255,0.8); }
         .hotbar-slot canvas { width: 32px; height: 32px; image-rendering: pixelated; }
+        .item-count { position: absolute; bottom: 2px; right: 4px; color: white; font-size: 14px; text-shadow: 1px 1px 0 #000; font-weight: bold; }
 
-        #pause-menu {
+        .overlay-menu {
             position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: rgba(0, 0, 0, 0.7); color: white; display: flex; flex-direction: column;
-            align-items: center; justify-content: center; z-index: 50; cursor: pointer;
+            background: rgba(0, 0, 0, 0.7); color: white; display: none; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 50;
         }
-        .title { font-size: 40px; margin-bottom: 20px; color: #fff; text-shadow: 3px 3px 0 #000; }
-        .btn { padding: 10px 40px; background: #c6c6c6; border: 2px solid #000; border-top-color: #fff; border-left-color: #fff; color: #000; font-size: 20px; }
+        .title { font-size: 40px; margin-bottom: 20px; text-shadow: 3px 3px 0 #000; }
+        .btn { padding: 10px 40px; background: #c6c6c6; border: 2px solid #000; border-top-color: #fff; border-left-color: #fff; color: #000; font-size: 20px; cursor: pointer; margin: 10px; }
         .btn:hover { background: #9999ff; }
-        .loading { font-size: 16px; color: #aaa; margin-top: 15px; }
+        .btn:disabled { background: #555; color: #888; cursor: not-allowed; border-color: #333; }
+        
+        #crafting-panel {
+            background: #c6c6c6; border: 4px solid #000; border-top-color: #fff; border-left-color: #fff;
+            padding: 20px; color: #000; width: 400px; max-width: 90%;
+        }
+        .recipe { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 2px solid #888; }
+        .recipe:last-child { border-bottom: none; }
+        .tips { position: absolute; bottom: 70px; color: white; font-size: 16px; text-shadow: 1px 1px 0 #000; z-index: 10; text-align: center; width: 100%; pointer-events: none;}
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
@@ -49,29 +58,32 @@
 <body>
 
     <div id="f3-menu">
-        Minecraft Infinite Web Clone<br>FPS: <span id="fps-counter">0</span><br>
-        Active Blocks: <span id="block-counter">0</span><br><br>
-        XYZ: <span id="debug-xyz">0 / 0 / 0</span><br>
-        Targeted Block: <span id="debug-target">None</span>
+        Minecraft Survival Web<br>FPS: <span id="fps-counter">0</span><br>
+        Active Blocks: <span id="block-counter">0</span><br>
+        XYZ: <span id="debug-xyz">0 / 0 / 0</span>
     </div>
     <div id="crosshair"></div>
-    <div id="hotbar-container">
-        <div class="hotbar-slot selected" id="slot-1"></div>
-        <div class="hotbar-slot" id="slot-2"></div>
-        <div class="hotbar-slot" id="slot-3"></div>
-        <div class="hotbar-slot" id="slot-4"></div>
-        <div class="hotbar-slot" id="slot-5"></div>
-    </div>
-    <div id="pause-menu">
+    <div class="tips">左鍵: 採集破壞 | 右鍵: 放置 (需有庫存) | E: 打開背包與合成</div>
+    
+    <div id="hotbar-container"></div> <div id="pause-menu" class="overlay-menu" style="display: flex;">
         <div class="title">Game Menu</div>
-        <div class="btn">Back to Game</div>
-        <p class="loading">進入遊戲後，往下挖即可看到「無法破壞的基岩層」！</p>
+        <div class="btn" id="resume-btn">回到遊戲</div>
+        <p style="color: #aaa; margin-top: 15px;">提示：點擊按鈕或畫面開始遊玩。按 E 鍵可開啟合成表。</p>
+    </div>
+
+    <div id="inventory-menu" class="overlay-menu">
+        <div class="title">合成表 (Crafting)</div>
+        <div id="crafting-panel">
+            <h3 style="margin-top: 0;">可用配方：</h3>
+            <div id="recipes-container"></div>
+        </div>
+        <div class="btn" id="close-inv-btn">關閉背包</div>
     </div>
 
     <script>
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x87CEEB);
-        scene.fog = new THREE.Fog(0x87CEEB, 20, 60); 
+        scene.fog = new THREE.Fog(0x87CEEB, 15, 50); 
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -80,24 +92,18 @@
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         document.body.appendChild(renderer.domElement);
 
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-        scene.add(ambientLight);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); scene.add(ambientLight);
         const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
-        dirLight.position.set(50, 100, 50);
-        dirLight.castShadow = true;
-        scene.add(dirLight);
+        dirLight.position.set(50, 100, 50); dirLight.castShadow = true; scene.add(dirLight);
 
-        // --- 1. 像素材質生成器 (新增基岩) ---
+        // --- 1. 像素材質生成與物資定義 ---
         function generateTexture(type) {
-            const canvas = document.createElement('canvas');
-            canvas.width = 16; canvas.height = 16;
+            const canvas = document.createElement('canvas'); canvas.width = 16; canvas.height = 16;
             const ctx = canvas.getContext('2d');
-
-            function drawNoise(base, variance) {
+            function drawNoise(base, var_c) {
                 ctx.fillStyle = base; ctx.fillRect(0, 0, 16, 16);
                 for(let i=0; i<256; i++) {
-                    const r = Math.random() * variance - variance/2;
-                    ctx.fillStyle = `rgba(0,0,0,${Math.abs(r)})`;
+                    ctx.fillStyle = `rgba(0,0,0,${Math.abs(Math.random()*var_c - var_c/2)})`;
                     ctx.fillRect(i%16, Math.floor(i/16), 1, 1);
                 }
             }
@@ -105,64 +111,139 @@
             if (type === 'dirt') drawNoise('#684A33', 0.2);
             else if (type === 'grass_top') drawNoise('#5B8731', 0.15);
             else if (type === 'grass_side') {
-                drawNoise('#684A33', 0.2);
-                ctx.fillStyle = '#5B8731';
+                drawNoise('#684A33', 0.2); ctx.fillStyle = '#5B8731';
                 for(let x=0; x<16; x++) ctx.fillRect(x, 0, 1, 3 + Math.floor(Math.random()*3));
             }
             else if (type === 'stone') drawNoise('#7D7D7D', 0.1);
-            else if (type === 'wood') {
-                drawNoise('#9A7441', 0.1);
-                ctx.fillStyle = 'rgba(0,0,0,0.1)';
+            else if (type === 'planks') {
+                drawNoise('#a07e53', 0.1); ctx.fillStyle = 'rgba(0,0,0,0.2)';
                 for(let x=0; x<16; x+=4) ctx.fillRect(x, 0, 1, 16);
+            }
+            else if (type === 'log_side') { // 原木側面 (樹皮)
+                drawNoise('#5c4033', 0.3); ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                for(let x=0; x<16; x+=2) ctx.fillRect(x, 0, 1, 16);
+            }
+            else if (type === 'log_top') { // 原木頂部 (年輪)
+                drawNoise('#a07e53', 0.1); ctx.fillStyle = 'rgba(92, 64, 51, 0.8)';
+                ctx.beginPath(); ctx.arc(8, 8, 6, 0, Math.PI*2); ctx.stroke();
+                ctx.beginPath(); ctx.arc(8, 8, 3, 0, Math.PI*2); ctx.stroke();
+            }
+            else if (type === 'leaves') { // 樹葉
+                drawNoise('#2d8c2d', 0.4); 
+                // 挖洞產生透視感
+                ctx.globalCompositeOperation = 'destination-out';
+                for(let i=0; i<30; i++) ctx.fillRect(Math.floor(Math.random()*16), Math.floor(Math.random()*16), 2, 2);
             }
             else if (type === 'glass') {
                 ctx.fillStyle = 'rgba(200, 240, 255, 0.3)'; ctx.fillRect(0, 0, 16, 16);
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'; ctx.fillRect(1, 1, 14, 1); ctx.fillRect(1, 1, 1, 14);
             }
-            // 🔥 基岩材質：深灰色基底配上黑色顆粒紋路
             else if (type === 'bedrock') {
-                drawNoise('#2e2e2e', 0.4);
-                ctx.fillStyle = '#141414';
-                for(let i=0; i<25; i++) {
-                    ctx.fillRect(Math.floor(Math.random()*15), Math.floor(Math.random()*15), 2, 2);
-                }
+                drawNoise('#2e2e2e', 0.4); ctx.fillStyle = '#141414';
+                for(let i=0; i<25; i++) ctx.fillRect(Math.floor(Math.random()*15), Math.floor(Math.random()*15), 2, 2);
             }
 
-            const texture = new THREE.CanvasTexture(canvas);
-            texture.magFilter = THREE.NearestFilter; 
+            const texture = new THREE.CanvasTexture(canvas); texture.magFilter = THREE.NearestFilter; 
             return { tex: texture, canvas: canvas };
         }
 
-        const texDirt = generateTexture('dirt').tex;
-        const matDirt = new THREE.MeshStandardMaterial({ map: texDirt });
         const matGrassBlock = [
             new THREE.MeshStandardMaterial({ map: generateTexture('grass_side').tex }),
             new THREE.MeshStandardMaterial({ map: generateTexture('grass_side').tex }),
             new THREE.MeshStandardMaterial({ map: generateTexture('grass_top').tex }),
-            matDirt,
+            new THREE.MeshStandardMaterial({ map: generateTexture('dirt').tex }),
             new THREE.MeshStandardMaterial({ map: generateTexture('grass_side').tex }),
             new THREE.MeshStandardMaterial({ map: generateTexture('grass_side').tex })
         ];
+        const matLog = [
+            new THREE.MeshStandardMaterial({ map: generateTexture('log_side').tex }),
+            new THREE.MeshStandardMaterial({ map: generateTexture('log_side').tex }),
+            new THREE.MeshStandardMaterial({ map: generateTexture('log_top').tex }),
+            new THREE.MeshStandardMaterial({ map: generateTexture('log_top').tex }),
+            new THREE.MeshStandardMaterial({ map: generateTexture('log_side').tex }),
+            new THREE.MeshStandardMaterial({ map: generateTexture('log_side').tex })
+        ];
 
-        const materialsDict = {
-            1: { mat: matGrassBlock, name: "Grass Block", thumb: generateTexture('grass_side').canvas },
-            2: { mat: matDirt, name: "Dirt", thumb: generateTexture('dirt').canvas },
-            3: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('stone').tex }), name: "Stone", thumb: generateTexture('stone').canvas },
-            4: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('wood').tex }), name: "Wooden Planks", thumb: generateTexture('wood').canvas },
-            5: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('glass').tex, transparent: true, opacity: 0.8 }), name: "Glass", thumb: generateTexture('glass').canvas },
-            6: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('bedrock').tex }), name: "Bedrock" } // 系統內部代碼 6 為基岩
+        // 方塊圖鑑
+        const itemsDict = {
+            1: { mat: matGrassBlock, name: "草地", thumb: generateTexture('grass_side').canvas },
+            2: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('dirt').tex }), name: "泥土", thumb: generateTexture('dirt').canvas },
+            3: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('stone').tex }), name: "石頭", thumb: generateTexture('stone').canvas },
+            4: { mat: matLog, name: "原木", thumb: generateTexture('log_side').canvas },
+            5: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('leaves').tex, transparent: true, opacity: 0.85, alphaTest: 0.1 }), name: "樹葉", thumb: generateTexture('leaves').canvas },
+            6: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('planks').tex }), name: "木板", thumb: generateTexture('planks').canvas },
+            7: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('glass').tex, transparent: true, opacity: 0.8 }), name: "玻璃", thumb: generateTexture('glass').canvas },
+            8: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('bedrock').tex }), name: "基岩", thumb: null } // 基岩不放進包包
         };
 
-        for(let i=1; i<=5; i++) document.getElementById('slot-'+i).appendChild(materialsDict[i].thumb);
+        // --- 2. 生存模式：庫存與快捷列系統 ---
+        const INVENTORY_SLOTS = 7;
+        let selectedSlot = 1;
+        // 起始物資皆為 0
+        let inventory = { 1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0 }; 
 
-        // --- 2. 無限地形與地底基岩系統 ---
+        const hotbarContainer = document.getElementById('hotbar-container');
+        for(let i=1; i<=INVENTORY_SLOTS; i++) {
+            const slot = document.createElement('div');
+            slot.className = `hotbar-slot ${i === selectedSlot ? 'selected' : ''}`;
+            slot.id = `slot-${i}`;
+            slot.appendChild(itemsDict[i].thumb.cloneNode());
+            const countLabel = document.createElement('span');
+            countLabel.className = 'item-count';
+            countLabel.id = `count-${i}`;
+            countLabel.innerText = "0";
+            slot.appendChild(countLabel);
+            hotbarContainer.appendChild(slot);
+        }
+
+        function updateInventoryUI() {
+            for(let i=1; i<=INVENTORY_SLOTS; i++) {
+                document.getElementById(`count-${i}`).innerText = inventory[i];
+                // 如果沒有物資，圖示稍微變暗
+                document.getElementById(`slot-${i}`).style.opacity = inventory[i] > 0 ? "1" : "0.5";
+            }
+            renderCraftingMenu(); // 同步更新合成表按鈕狀態
+        }
+        updateInventoryUI();
+
+        // --- 3. 合成系統 (Crafting) ---
+        const recipes = [
+            { id: 'craft_planks', inputId: 4, inputQty: 1, outputId: 6, outputQty: 4, desc: "合成 4x 木板 (需 1x 原木)" },
+            { id: 'craft_glass', inputId: 3, inputQty: 1, outputId: 7, outputQty: 1, desc: "燒製 1x 玻璃 (需 1x 石頭)" },
+            { id: 'craft_grass', inputId: 2, inputQty: 1, outputId: 1, outputQty: 1, desc: "合成 1x 草地 (需 1x 泥土)" }
+        ];
+
+        const recipesContainer = document.getElementById('recipes-container');
+        function renderCraftingMenu() {
+            recipesContainer.innerHTML = '';
+            recipes.forEach(r => {
+                const div = document.createElement('div'); div.className = 'recipe';
+                const text = document.createElement('span'); text.innerText = r.desc;
+                const btn = document.createElement('button'); btn.className = 'btn'; btn.innerText = '合成';
+                
+                // 檢查物資是否足夠
+                if (inventory[r.inputId] < r.inputQty) {
+                    btn.disabled = true;
+                    btn.innerText = '物資不足';
+                } else {
+                    btn.onclick = () => {
+                        inventory[r.inputId] -= r.inputQty;
+                        inventory[r.outputId] += r.outputQty;
+                        updateInventoryUI();
+                    };
+                }
+                div.appendChild(text); div.appendChild(btn);
+                recipesContainer.appendChild(div);
+            });
+        }
+
+        // --- 4. 無限地形與樹木生成 ---
         const BLOCK_SIZE = 2;
         const worldBlocks = [];
         const worldMap = new Map(); 
         const generatedColumns = new Set(); 
         const blockGeometry = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
-        
-        const RENDER_RADIUS = 18; 
+        const RENDER_RADIUS = 15; 
 
         function getBlockKey(x, y, z) { return `${Math.round(x)},${Math.round(y)},${Math.round(z)}`; }
 
@@ -170,14 +251,12 @@
             const key = getBlockKey(x, y, z);
             if (worldMap.has(key)) return; 
 
-            const block = new THREE.Mesh(blockGeometry, materialsDict[typeId].mat);
+            const block = new THREE.Mesh(blockGeometry, itemsDict[typeId].mat);
             block.position.set(x, y, z);
             block.castShadow = true; block.receiveShadow = true;
-            block.userData = { typeId: typeId, name: materialsDict[typeId].name };
+            block.userData = { typeId: typeId, name: itemsDict[typeId].name };
             
-            scene.add(block);
-            worldBlocks.push(block);
-            worldMap.set(key, block);
+            scene.add(block); worldBlocks.push(block); worldMap.set(key, block);
         }
 
         function updateTerrain() {
@@ -187,19 +266,32 @@
             for (let x = px - RENDER_RADIUS; x <= px + RENDER_RADIUS; x++) {
                 for (let z = pz - RENDER_RADIUS; z <= pz + RENDER_RADIUS; z++) {
                     const colKey = `${x},${z}`;
-                    
                     if (!generatedColumns.has(colKey)) {
                         generatedColumns.add(colKey);
-                        
                         let height = Math.floor((Math.sin(x/8) + Math.cos(z/10) + Math.sin((x+z)/14)) * 2.5);
                         
-                        // 生成地層結構
-                        createBlock(x * BLOCK_SIZE, height * BLOCK_SIZE, z * BLOCK_SIZE, 1);     // 地表：草地
-                        createBlock(x * BLOCK_SIZE, (height - 1) * BLOCK_SIZE, z * BLOCK_SIZE, 2); // 中層：泥土
-                        createBlock(x * BLOCK_SIZE, (height - 2) * BLOCK_SIZE, z * BLOCK_SIZE, 3); // 深層：石頭
-                        
-                        // 🔥 關鍵：在石頭下方直接鋪上一層「基岩 (TypeID: 6)」
-                        createBlock(x * BLOCK_SIZE, (height - 3) * BLOCK_SIZE, z * BLOCK_SIZE, 6); 
+                        createBlock(x * BLOCK_SIZE, height * BLOCK_SIZE, z * BLOCK_SIZE, 1);     // 草地
+                        createBlock(x * BLOCK_SIZE, (height - 1) * BLOCK_SIZE, z * BLOCK_SIZE, 2); // 泥土
+                        createBlock(x * BLOCK_SIZE, (height - 2) * BLOCK_SIZE, z * BLOCK_SIZE, 3); // 石頭
+                        createBlock(x * BLOCK_SIZE, (height - 3) * BLOCK_SIZE, z * BLOCK_SIZE, 8); // 基岩
+
+                        // 🌲 隨機生成樹木 (5% 機率)
+                        if (Math.random() < 0.05) {
+                            let treeHeight = 3 + Math.floor(Math.random() * 2);
+                            // 樹幹
+                            for(let ty=1; ty<=treeHeight; ty++) {
+                                createBlock(x * BLOCK_SIZE, (height + ty) * BLOCK_SIZE, z * BLOCK_SIZE, 4); 
+                            }
+                            // 樹葉
+                            for(let lx=-1; lx<=1; lx++) {
+                                for(let lz=-1; lz<=1; lz++) {
+                                    if(lx===0 && lz===0) continue; // 中間留給樹幹
+                                    createBlock((x+lx)*BLOCK_SIZE, (height+treeHeight)*BLOCK_SIZE, (z+lz)*BLOCK_SIZE, 5);
+                                    createBlock((x+lx)*BLOCK_SIZE, (height+treeHeight+1)*BLOCK_SIZE, (z+lz)*BLOCK_SIZE, 5);
+                                }
+                            }
+                            createBlock(x*BLOCK_SIZE, (height+treeHeight+2)*BLOCK_SIZE, z*BLOCK_SIZE, 5); // 樹頂葉子
+                        }
                     }
                 }
             }
@@ -207,50 +299,65 @@
             let activeCount = 0;
             worldMap.forEach((block) => {
                 const dist = Math.sqrt(Math.pow(block.position.x/BLOCK_SIZE - px, 2) + Math.pow(block.position.z/BLOCK_SIZE - pz, 2));
-                if (dist > RENDER_RADIUS) {
-                    block.visible = false;
-                } else {
-                    block.visible = true;
-                    activeCount++;
-                }
+                block.visible = dist <= RENDER_RADIUS;
+                if(block.visible) activeCount++;
             });
             document.getElementById('block-counter').innerText = activeCount;
         }
 
-        const outlineGeo = new THREE.EdgesGeometry(blockGeometry);
-        const outlineMat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 });
-        const highlightBox = new THREE.LineSegments(outlineGeo, outlineMat);
-        highlightBox.visible = false;
-        scene.add(highlightBox);
+        const highlightBox = new THREE.LineSegments(new THREE.EdgesGeometry(blockGeometry), new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 }));
+        highlightBox.visible = false; scene.add(highlightBox);
 
-        // --- 3. 玩家控制 ---
+        // --- 5. 狀態控制與 UI 系統 ---
         const controls = new THREE.PointerLockControls(camera, document.body);
-        const pauseMenu = document.getElementById('pause-menu');
-
-        pauseMenu.addEventListener('click', () => controls.lock());
-        controls.addEventListener('lock', () => pauseMenu.style.display = 'none');
-        controls.addEventListener('unlock', () => pauseMenu.style.display = 'flex');
         scene.add(controls.getObject());
-
         controls.getObject().position.set(0, 30, 0); 
 
+        let uiState = 'PAUSE'; // 'GAME', 'PAUSE', 'INVENTORY'
+
+        document.getElementById('resume-btn').addEventListener('click', () => controls.lock());
+        document.getElementById('close-inv-btn').addEventListener('click', () => controls.lock());
+
+        controls.addEventListener('lock', () => {
+            uiState = 'GAME';
+            document.getElementById('pause-menu').style.display = 'none';
+            document.getElementById('inventory-menu').style.display = 'none';
+        });
+
+        controls.addEventListener('unlock', () => {
+            if (uiState === 'GAME') uiState = 'PAUSE'; // 預設 ESC 解鎖為暫停
+            if (uiState === 'PAUSE') {
+                document.getElementById('pause-menu').style.display = 'flex';
+                document.getElementById('inventory-menu').style.display = 'none';
+            } else if (uiState === 'INVENTORY') {
+                document.getElementById('pause-menu').style.display = 'none';
+                document.getElementById('inventory-menu').style.display = 'flex';
+                renderCraftingMenu();
+            }
+        });
+
         const move = { forward: false, backward: false, left: false, right: false };
-        let velocity = new THREE.Vector3();
-        let direction = new THREE.Vector3();
-        let canJump = false;
-        let selectedSlot = 1;
-        let showF3 = false;
+        let velocity = new THREE.Vector3(), direction = new THREE.Vector3(), canJump = false, showF3 = false;
 
         document.addEventListener('keydown', (e) => {
+            if (uiState !== 'GAME') return; // 在選單中禁用移動
             if (e.code === 'KeyW') move.forward = true;
             if (e.code === 'KeyS') move.backward = true;
             if (e.code === 'KeyA') move.left = true;
             if (e.code === 'KeyD') move.right = true;
             if (e.code === 'Space' && canJump) { velocity.y = 12; canJump = false; }
             if (e.code === 'F3') { e.preventDefault(); showF3 = !showF3; document.getElementById('f3-menu').style.display = showF3 ? 'block' : 'none'; }
-            if (['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'].includes(e.code)) {
+            
+            // 🔥 按 E 開啟合成與背包
+            if (e.code === 'KeyE') {
+                uiState = 'INVENTORY';
+                controls.unlock();
+            }
+
+            // 切換快捷列 (1~7)
+            if (e.key >= '1' && e.key <= INVENTORY_SLOTS.toString()) {
                 selectedSlot = parseInt(e.key);
-                for(let i=1; i<=5; i++) document.getElementById('slot-'+i).classList.remove('selected');
+                for(let i=1; i<=INVENTORY_SLOTS; i++) document.getElementById('slot-'+i).classList.remove('selected');
                 document.getElementById('slot-'+selectedSlot).classList.add('selected');
             }
         });
@@ -262,46 +369,58 @@
             if (e.code === 'KeyD') move.right = false;
         });
 
-        // 互動：破壞與放置
+        // --- 6. 核心：採集與放置邏輯 ---
         const raycaster = new THREE.Raycaster();
         const centerMouse = new THREE.Vector2(0, 0);
 
         document.addEventListener('mousedown', (e) => {
-            if (!controls.isLocked) return;
-            raycaster.setFromCamera(centerMouse, camera);
-            raycaster.far = 10;
+            if (uiState !== 'GAME' || !controls.isLocked) return;
+            raycaster.setFromCamera(centerMouse, camera); raycaster.far = 10;
             const intersects = raycaster.intersectObjects(worldBlocks.filter(b => b.visible)); 
 
             if (intersects.length > 0) {
                 const intersect = intersects[0];
-                if (e.button === 0) { 
-                    // 🔥 核心防護：如果點到的是基岩 (typeId === 6)，直接攔截，不允許刪除！
-                    if (intersect.object.userData.typeId === 6) {
-                        console.log("基岩是無法被破壞的！");
-                        return; 
+                const targetObj = intersect.object;
+                const typeId = targetObj.userData.typeId;
+
+                if (e.button === 0) { // 左鍵：採集破壞
+                    if (typeId === 8) return; // 基岩無法破壞
+
+                    // 💎 將破壞的方塊加入庫存！
+                    if (inventory[typeId] !== undefined) {
+                        inventory[typeId]++;
+                        updateInventoryUI();
                     }
 
-                    scene.remove(intersect.object);
-                    const index = worldBlocks.indexOf(intersect.object);
+                    scene.remove(targetObj);
+                    const index = worldBlocks.indexOf(targetObj);
                     if (index > -1) worldBlocks.splice(index, 1);
-                    worldMap.delete(getBlockKey(intersect.object.position.x, intersect.object.position.y, intersect.object.position.z));
+                    worldMap.delete(getBlockKey(targetObj.position.x, targetObj.position.y, targetObj.position.z));
                     highlightBox.visible = false;
-                } else if (e.button === 2) { 
-                    const normal = intersect.face.normal;
-                    const newPos = intersect.object.position.clone().add(normal.clone().multiplyScalar(BLOCK_SIZE));
-                    const pPos = controls.getObject().position;
-                    if (Math.abs(newPos.x - pPos.x) < 1.5 && Math.abs(newPos.z - pPos.z) < 1.5 && newPos.y > pPos.y - 3 && newPos.y < pPos.y + 1) return;
-                    createBlock(newPos.x, newPos.y, newPos.z, selectedSlot);
-                    generatedColumns.add(`${Math.round(newPos.x/BLOCK_SIZE)},${Math.round(newPos.z/BLOCK_SIZE)}`);
+
+                } else if (e.button === 2) { // 右鍵：放置
+                    // 🛑 檢查背包裡有沒有該物資
+                    if (inventory[selectedSlot] > 0) {
+                        const normal = intersect.face.normal;
+                        const newPos = targetObj.position.clone().add(normal.clone().multiplyScalar(BLOCK_SIZE));
+                        const pPos = controls.getObject().position;
+                        if (Math.abs(newPos.x - pPos.x) < 1.5 && Math.abs(newPos.z - pPos.z) < 1.5 && newPos.y > pPos.y - 3 && newPos.y < pPos.y + 1) return; // 防卡牆
+                        
+                        createBlock(newPos.x, newPos.y, newPos.z, selectedSlot);
+                        generatedColumns.add(`${Math.round(newPos.x/BLOCK_SIZE)},${Math.round(newPos.z/BLOCK_SIZE)}`);
+                        
+                        // 消耗物資
+                        inventory[selectedSlot]--;
+                        updateInventoryUI();
+                    }
                 }
             }
         });
 
-        // --- 4. 遊戲主迴圈 ---
+        // --- 7. 遊戲主迴圈 ---
         const clock = new THREE.Clock();
         const downRay = new THREE.Raycaster(); 
         let frames = 0, lastTime = performance.now();
-
         updateTerrain();
 
         function animate() {
@@ -310,91 +429,53 @@
             frames++; const timeNow = performance.now();
             if (timeNow >= lastTime + 1000) { document.getElementById('fps-counter').innerText = frames; frames = 0; lastTime = timeNow; }
 
-            if (frames % 10 === 0 && controls.isLocked) {
-                updateTerrain();
-            }
+            if (frames % 10 === 0 && controls.isLocked) updateTerrain();
 
             if (controls.isLocked) {
                 const delta = Math.min(clock.getDelta(), 0.1); 
                 const playerObj = controls.getObject();
 
-                velocity.x -= velocity.x * 10.0 * delta;
-                velocity.z -= velocity.z * 10.0 * delta;
-                direction.z = Number(move.forward) - Number(move.backward);
-                direction.x = Number(move.right) - Number(move.left);
+                velocity.x -= velocity.x * 10.0 * delta; velocity.z -= velocity.z * 10.0 * delta;
+                direction.z = Number(move.forward) - Number(move.backward); direction.x = Number(move.right) - Number(move.left);
                 direction.normalize();
 
                 const speed = 100.0;
                 if (move.forward || move.backward) velocity.z -= direction.z * speed * delta;
                 if (move.left || move.right) velocity.x -= direction.x * speed * delta;
 
-                // 防穿牆
-                const nextX = playerObj.position.x - velocity.x * delta;
-                const nextZ = playerObj.position.z - velocity.z * delta;
-                const bodyY1 = playerObj.position.y - 1.5; 
-                const bodyY2 = playerObj.position.y - 0.5; 
+                const nextX = playerObj.position.x - velocity.x * delta, nextZ = playerObj.position.z - velocity.z * delta;
+                const bodyY1 = playerObj.position.y - 1.5, bodyY2 = playerObj.position.y - 0.5; 
 
                 function isWall(x, y, z) {
-                    const bx = Math.round(x / BLOCK_SIZE) * BLOCK_SIZE;
-                    const by = Math.round(y / BLOCK_SIZE) * BLOCK_SIZE;
-                    const bz = Math.round(z / BLOCK_SIZE) * BLOCK_SIZE;
-                    return worldMap.has(getBlockKey(bx, by, bz));
+                    return worldMap.has(getBlockKey(Math.round(x/BLOCK_SIZE)*BLOCK_SIZE, Math.round(y/BLOCK_SIZE)*BLOCK_SIZE, Math.round(z/BLOCK_SIZE)*BLOCK_SIZE));
                 }
 
-                if (!isWall(nextX, bodyY1, playerObj.position.z) && !isWall(nextX, bodyY2, playerObj.position.z)) {
-                    controls.moveRight(-velocity.x * delta);
-                }
-                if (!isWall(playerObj.position.x, bodyY1, nextZ) && !isWall(playerObj.position.x, bodyY2, nextZ)) {
-                    controls.moveForward(-velocity.z * delta);
-                }
+                if (!isWall(nextX, bodyY1, playerObj.position.z) && !isWall(nextX, bodyY2, playerObj.position.z)) controls.moveRight(-velocity.x * delta);
+                if (!isWall(playerObj.position.x, bodyY1, nextZ) && !isWall(playerObj.position.x, bodyY2, nextZ)) controls.moveForward(-velocity.z * delta);
 
-                velocity.y -= 9.8 * 4.0 * delta; 
-                playerObj.position.y += velocity.y * delta;
+                velocity.y -= 9.8 * 4.0 * delta; playerObj.position.y += velocity.y * delta;
 
-                // 地板與基岩碰撞偵測 (站立在基岩上)
-                downRay.set(playerObj.position, new THREE.Vector3(0, -1, 0));
-                downRay.far = 10;
+                downRay.set(playerObj.position, new THREE.Vector3(0, -1, 0)); downRay.far = 10;
                 const floorIntersects = downRay.intersectObjects(worldBlocks.filter(b => b.visible));
-                
                 canJump = false;
-                if (floorIntersects.length > 0) {
-                    const floorY = floorIntersects[0].point.y;
-                    if (playerObj.position.y <= floorY + 3) {
-                        velocity.y = Math.max(0, velocity.y); 
-                        playerObj.position.y = floorY + 3;
-                        canJump = true;
-                    }
+                if (floorIntersects.length > 0 && playerObj.position.y <= floorIntersects[0].point.y + 3) {
+                    velocity.y = Math.max(0, velocity.y); playerObj.position.y = floorIntersects[0].point.y + 3; canJump = true;
                 }
 
-                // 虛空保護 (以防萬一卡 Bug 穿過基岩)
-                if (playerObj.position.y < -40) {
-                    velocity.y = 0; 
-                    playerObj.position.y = 30; 
-                }
+                if (playerObj.position.y < -40) { velocity.y = 0; playerObj.position.y = 30; }
 
-                raycaster.setFromCamera(centerMouse, camera);
-                raycaster.far = 10;
+                raycaster.setFromCamera(centerMouse, camera); raycaster.far = 10;
                 const intersects = raycaster.intersectObjects(worldBlocks.filter(b => b.visible));
                 if (intersects.length > 0) {
-                    highlightBox.position.copy(intersects[0].object.position);
-                    highlightBox.visible = true;
-                    if (showF3) document.getElementById('debug-target').innerText = intersects[0].object.userData.name;
-                } else {
-                    highlightBox.visible = false;
-                    if (showF3) document.getElementById('debug-target').innerText = "None";
-                }
-
-                if (showF3) {
-                    document.getElementById('debug-xyz').innerText = `${playerObj.position.x.toFixed(1)} / ${playerObj.position.y.toFixed(1)} / ${playerObj.position.z.toFixed(1)}`;
-                }
+                    highlightBox.position.copy(intersects[0].object.position); highlightBox.visible = true;
+                    if (showF3) document.getElementById('debug-xyz').innerText = `${playerObj.position.x.toFixed(1)} / ${playerObj.position.y.toFixed(1)} / ${playerObj.position.z.toFixed(1)}`;
+                } else highlightBox.visible = false;
             }
             renderer.render(scene, camera);
         }
 
         animate();
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight);
-        });
+        window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
     </script>
 </body>
 </html>
