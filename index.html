@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minecraft Web - Super Smooth Survival</title>
+    <title>Minecraft Web - Survival Edition</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: 'Courier New', monospace; user-select: none; }
         
@@ -21,6 +21,13 @@
         }
         #crosshair::before { top: 7px; left: 0; width: 16px; height: 2px; }
         #crosshair::after { top: 0; left: 7px; width: 2px; height: 16px; }
+
+        /* 血量條容器 */
+        #health-container {
+            position: absolute; bottom: 64px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 2px; font-size: 20px; z-index: 10; pointer-events: none;
+            letter-spacing: -2px;
+        }
 
         #hotbar-container {
             position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
@@ -50,7 +57,13 @@
         }
         .recipe { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 2px solid #888; }
         .recipe:last-child { border-bottom: none; }
-        .tips { position: absolute; bottom: 70px; color: white; font-size: 16px; text-shadow: 1px 1px 0 #000; z-index: 10; text-align: center; width: 100%; pointer-events: none;}
+        .tips { position: absolute; bottom: 90px; color: white; font-size: 16px; text-shadow: 1px 1px 0 #000; z-index: 10; text-align: center; width: 100%; pointer-events: none;}
+
+        /* 受傷紅光特效 */
+        #damage-flash {
+            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(255, 0, 0, 0.35); display: none; pointer-events: none; z-index: 45;
+        }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
@@ -58,23 +71,24 @@
 <body>
 
     <div id="f3-menu">
-        Minecraft Smooth Survival<br>FPS: <span id="fps-counter">0</span><br>
+        Minecraft Web Smooth Edition<br>FPS: <span id="fps-counter">0</span><br>
         Rendered Blocks: <span id="block-counter">0</span><br>
         XYZ: <span id="debug-xyz">0 / 0 / 0</span>
     </div>
     <div id="crosshair"></div>
-    <div class="tips">左鍵: 採集物資 | 右鍵: 建造 | E: 打開背包合成 | F3: 效能資訊</div>
+    <div id="damage-flash"></div>
+    <div class="tips">W A S D: 移動 | 空白鍵: 跳躍 | 左鍵: 挖礦 | 右鍵: 放方塊 | E: 背包合成 | F3: 效能資訊</div>
     
+    <div id="health-container"></div>
     <div id="hotbar-container"></div>
 
     <div id="pause-menu" class="overlay-menu" style="display: flex;">
-        <div class="title">Game Menu</div>
+        <div class="title">Minecraft Web</div>
         <div class="btn" id="resume-btn">開始遊戲</div>
-        <p style="color: #aaa; margin-top: 15px;">已啟動動態記憶體回收技術，大幅提升順暢度！</p>
     </div>
 
     <div id="inventory-menu" class="overlay-menu">
-        <div class="title">合成表 (Crafting)</div>
+        <div class="title">合成背包 (Inventory & Crafting)</div>
         <div id="crafting-panel">
             <h3 style="margin-top: 0;">可用配方：</h3>
             <div id="recipes-container"></div>
@@ -82,8 +96,13 @@
         <div class="btn" id="close-inv-btn">關閉背包</div>
     </div>
 
+    <div id="death-menu" class="overlay-menu" style="background: rgba(100, 0, 0, 0.85);">
+        <div class="title" style="color: #ff3333; font-size: 60px;">你死了！</div>
+        <div class="btn" id="respawn-btn">重新投胎</div>
+    </div>
+
     <script>
-        // --- 1. 場景設定 (縮小霧氣範圍，完美掩蓋加載邊緣) ---
+        // --- 1. 場景與渲染器初始化 ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x87CEEB);
         scene.fog = new THREE.Fog(0x87CEEB, 10, 24); 
@@ -93,10 +112,10 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); scene.add(ambientLight);
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.4); dirLight.position.set(20, 40, 20); scene.add(dirLight);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.85); scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.35); dirLight.position.set(20, 40, 20); scene.add(dirLight);
 
-        // --- 2. 材質生成器 ---
+        // --- 2. 材質貼圖生成器 ---
         function generateTexture(type) {
             const canvas = document.createElement('canvas'); canvas.width = 16; canvas.height = 16;
             const ctx = canvas.getContext('2d');
@@ -136,16 +155,73 @@
             8: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('bedrock').tex }), name: "基岩", thumb: null }
         };
 
-        // --- 3. 庫存與快捷列 ---
-        const INVENTORY_SLOTS = 7; let selectedSlot = 1;
-        let inventory = { 1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0 }; 
+        // --- 3. 玩家數據與背包數據設定 ---
+        const INVENTORY_SLOTS = 7; 
+        let selectedSlot = 1;
+        let inventory = { 1:15, 2:10, 3:5, 4:4, 5:0, 6:0, 7:0 }; 
 
-        const hotbarContainer = document.getElementById('hotbar-container');
-        for(let i=1; i<=INVENTORY_SLOTS; i++) {
-            const slot = document.createElement('div'); slot.className = `hotbar-slot ${i === selectedSlot ? 'selected' : ''}`; slot.id = `slot-${i}`;
-            slot.appendChild(itemsDict[i].thumb.cloneNode());
-            const lbl = document.createElement('span'); lbl.className = 'item-count'; lbl.id = `count-${i}`; lbl.innerText = "0";
-            slot.appendChild(lbl); hotbarContainer.appendChild(slot);
+        // 血量控制系統變數
+        let health = 20; 
+        const maxHealth = 20;
+        let highestY = 0;       
+        let wasInAir = false;   
+
+        const recipes = [
+            { inputId: 4, inputQty: 1, outputId: 6, outputQty: 4, desc: "木板 x4 (需 1x 原木)" },
+            { inputId: 3, inputQty: 1, outputId: 7, outputQty: 1, desc: "玻璃 x1 (需 1x 石頭)" },
+            { inputId: 2, inputQty: 1, outputId: 1, outputQty: 1, desc: "草地 x1 (需 1x 泥土)" }
+        ];
+
+        function updateHealthUI() {
+            const container = document.getElementById('health-container');
+            container.innerHTML = '';
+            for (let i = 0; i < 10; i++) {
+                let heartIndex = i * 2;
+                if (health >= heartIndex + 2) {
+                    container.innerHTML += '❤️'; 
+                } else if (health === heartIndex + 1) {
+                    container.innerHTML += '💔'; 
+                } else {
+                    container.innerHTML += '🖤'; 
+                }
+            }
+        }
+
+        function takeDamage(amount) {
+            if (uiState === 'DEATH') return;
+            health -= amount;
+            if (health < 0) health = 0;
+            updateHealthUI();
+
+            const flash = document.getElementById('damage-flash');
+            flash.style.display = 'block';
+            setTimeout(() => flash.style.display = 'none', 180);
+
+            if (health <= 0) {
+                uiState = 'DEATH';
+                controls.unlock();
+            }
+        }
+
+        function renderCraftingMenu() {
+            const container = document.getElementById('recipes-container'); 
+            container.innerHTML = '';
+            recipes.forEach(r => {
+                const div = document.createElement('div'); div.className = 'recipe';
+                const text = document.createElement('span'); text.innerText = r.desc;
+                const btn = document.createElement('button'); btn.className = 'btn'; btn.innerText = '合成';
+                
+                if (inventory[r.inputId] < r.inputQty) { 
+                    btn.disabled = true; btn.innerText = '材料不足'; 
+                } else { 
+                    btn.onclick = () => { 
+                        inventory[r.inputId] -= r.inputQty; 
+                        inventory[r.outputId] += r.outputQty; 
+                        updateInventoryUI(); 
+                    }; 
+                }
+                div.appendChild(text); div.appendChild(btn); container.appendChild(div);
+            });
         }
 
         function updateInventoryUI() {
@@ -155,39 +231,43 @@
             }
             renderCraftingMenu();
         }
-        updateInventoryUI();
 
-        // 合成配方
-        const recipes = [
-            { inputId: 4, inputQty: 1, outputId: 6, outputQty: 4, desc: "合成 4x 木板 (需 1x 原木)" },
-            { inputId: 3, inputQty: 1, outputId: 7, outputQty: 1, desc: "燒製 1x 玻璃 (需 1x 石頭)" },
-            { inputId: 2, inputQty: 1, outputId: 1, outputQty: 1, desc: "合成 1x 草地 (需 1x 泥土)" }
-        ];
-
-        function renderCraftingMenu() {
-            const container = document.getElementById('recipes-container'); container.innerHTML = '';
-            recipes.forEach(r => {
-                const div = document.createElement('div'); div.className = 'recipe';
-                const text = document.createElement('span'); text.innerText = r.desc;
-                const btn = document.createElement('button'); btn.className = 'btn'; btn.innerText = '合成';
-                if (inventory[r.inputId] < r.inputQty) { btn.disabled = true; btn.innerText = '物資不足'; }
-                else { btn.onclick = () => { inventory[r.inputId] -= r.inputQty; inventory[r.outputId] += r.outputQty; updateInventoryUI(); }; }
-                div.appendChild(text); div.appendChild(btn); container.appendChild(div);
-            });
+        const hotbarContainer = document.getElementById('hotbar-container');
+        for(let i=1; i<=INVENTORY_SLOTS; i++) {
+            const slot = document.createElement('div'); 
+            slot.className = `hotbar-slot ${i === selectedSlot ? 'selected' : ''}`; 
+            slot.id = `slot-${i}`;
+            slot.appendChild(itemsDict[i].thumb); 
+            
+            const lbl = document.createElement('span'); 
+            lbl.className = 'item-count'; lbl.id = `count-${i}`; 
+            lbl.innerText = inventory[i];
+            
+            slot.appendChild(lbl); 
+            hotbarContainer.appendChild(slot);
         }
-
-        // --- 4. 🔥 核心優化：資料與網格分離式動態加載系統 ---
-        const BLOCK_SIZE = 2;
-        const RENDER_RADIUS = 8; // 降至 8，視野範圍剛好，效能提升 400%
         
-        const worldData = new Map();     // 儲存地圖純數據 "cx,cz" -> [{y, typeId}]
-        const activeMeshes = new Map();   // 儲存真正渲染在畫面上的 Mesh "gx,gy,gz" -> THREE.Mesh
-        const generatedColumns = new Set(); // 記錄哪些直行已經初始化過數據
+        updateInventoryUI();
+        updateHealthUI(); 
+
+        // --- 4. 地形動態生成系統 ---
+        const BLOCK_SIZE = 2;
+        const RENDER_RADIUS = 7; 
+        
+        const worldData = new Map();     
+        const activeMeshes = new Map();   
+        const generatedColumns = new Set(); 
 
         const blockGeometry = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
         function getBlockKey(x, y, z) { return `${Math.round(x)},${Math.round(y)},${Math.round(z)}`; }
 
-        // 初始化直行的純數據
+        function getSurfaceHeight(px, pz) {
+            const cx = Math.round(px / BLOCK_SIZE);
+            const cz = Math.round(pz / BLOCK_SIZE);
+            const height = Math.floor((Math.sin(cx/8) + Math.cos(cz/10) + Math.sin((cx+cz)/14)) * 2.5);
+            return (height * BLOCK_SIZE) + (BLOCK_SIZE / 2) + 2.9; 
+        }
+
         function initColumnData(cx, cz) {
             const colKey = `${cx},${cz}`;
             if (generatedColumns.has(colKey)) return;
@@ -197,17 +277,21 @@
             const list = worldData.get(colKey);
 
             let height = Math.floor((Math.sin(cx/8) + Math.cos(cz/10) + Math.sin((cx+cz)/14)) * 2.5);
-            list.push({ y: height, typeId: 1 });     // 草地
-            list.push({ y: height - 1, typeId: 2 }); // 泥土
-            list.push({ y: height - 2, typeId: 3 }); // 石頭
-            list.push({ y: height - 3, typeId: 8 }); // 基岩
+            
+            list.push({ y: height, typeId: 1 });     
+            list.push({ y: height - 1, typeId: 2 }); 
 
-            // 隨機生成樹木
-            if (Math.random() < 0.04) {
+            const bedrockLevel = -10;
+            for (let y = height - 2; y > bedrockLevel; y--) {
+                list.push({ y: y, typeId: 3 });      
+            }
+            list.push({ y: bedrockLevel, typeId: 8 });
+
+            // 🎯 確保重生點 (0,0) 不會長出樹木把你卡住
+            if (Math.random() < 0.04 && (cx !== 0 || cz !== 0)) {
                 let treeH = 3 + Math.floor(Math.random() * 2);
-                for(let ty=1; ty<=treeH; ty++) list.push({ y: height + ty, typeId: 4 }); // 樹幹
+                for(let ty=1; ty<=treeH; ty++) list.push({ y: height + ty, typeId: 4 }); 
                 
-                // 樹葉擴散至周圍數據中
                 for(let lx=-1; lx<=1; lx++) {
                     for(let lz=-1; lz<=1; lz++) {
                         const nKey = `${cx+lx},${cz+lz}`;
@@ -223,31 +307,25 @@
             }
         }
 
-        // 🔥 動態載入與「徹底銷毀」釋放記憶體
         function updateTerrain() {
             const playerObj = controls.getObject();
             const px = Math.round(playerObj.position.x / BLOCK_SIZE);
             const pz = Math.round(playerObj.position.z / BLOCK_SIZE);
 
-            // 1. 卸載太遠的 Mesh (從顯示卡跟場景徹底拔除)
             const toDelete = [];
             activeMeshes.forEach((mesh, key) => {
-                const cx = mesh.userData.cx; const cz = mesh.userData.cz;
-                if (Math.abs(cx - px) > RENDER_RADIUS || Math.abs(cz - pz) > RENDER_RADIUS) {
+                if (Math.abs(mesh.userData.cx - px) > RENDER_RADIUS || Math.abs(mesh.userData.cz - pz) > RENDER_RADIUS) {
                     toDelete.push(key);
                 }
             });
             toDelete.forEach(key => {
-                const mesh = activeMeshes.get(key);
-                scene.remove(mesh);
+                scene.remove(activeMeshes.get(key));
                 activeMeshes.delete(key);
             });
 
-            // 2. 載入範圍內的 Mesh
             for (let x = px - RENDER_RADIUS; x <= px + RENDER_RADIUS; x++) {
                 for (let z = pz - RENDER_RADIUS; z <= pz + RENDER_RADIUS; z++) {
                     initColumnData(x, z);
-                    
                     const list = worldData.get(`${x},${z}`) || [];
                     list.forEach(b => {
                         const gx = x * BLOCK_SIZE; const gy = b.y * BLOCK_SIZE; const gz = z * BLOCK_SIZE;
@@ -256,7 +334,7 @@
                         if (!activeMeshes.has(mKey)) {
                             const block = new THREE.Mesh(blockGeometry, itemsDict[b.typeId].mat);
                             block.position.set(gx, gy, gz);
-                            block.userData = { typeId: b.typeId, name: itemsDict[b.typeId].name, cx: x, cz: z, y: b.y };
+                            block.userData = { typeId: b.typeId, cx: x, cz: z, y: b.y };
                             scene.add(block);
                             activeMeshes.set(mKey, block);
                         }
@@ -269,18 +347,50 @@
         const highlightBox = new THREE.LineSegments(new THREE.EdgesGeometry(blockGeometry), new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 }));
         highlightBox.visible = false; scene.add(highlightBox);
 
-        // --- 5. 控制與狀態系統 ---
-        const controls = new THREE.PointerLockControls(camera, document.body); scene.add(controls.getObject());
-        controls.getObject().position.set(0, 25, 0); 
+        // --- 5. 控制器與 UI 狀態綁定 ---
+        const controls = new THREE.PointerLockControls(camera, document.body); 
+        scene.add(controls.getObject());
+        
+        controls.getObject().position.set(0, getSurfaceHeight(0, 0), 0); 
         let uiState = 'PAUSE';
 
         document.getElementById('resume-btn').addEventListener('click', () => controls.lock());
         document.getElementById('close-inv-btn').addEventListener('click', () => controls.lock());
-        controls.addEventListener('lock', () => { uiState = 'GAME'; document.getElementById('pause-menu').style.display = 'none'; document.getElementById('inventory-menu').style.display = 'none'; });
+        
+        // 🎯 重新優化的重生按鈕
+        document.getElementById('respawn-btn').addEventListener('click', () => {
+            health = maxHealth;
+            updateHealthUI();
+            
+            // 1. 精準放回原點地表
+            controls.getObject().position.set(0, getSurfaceHeight(0, 0), 0); 
+            // 2. 清除死前的墜落速度，重置掉落判定
+            velocity.set(0, 0, 0);
+            highestY = getSurfaceHeight(0, 0); 
+            wasInAir = false; 
+            
+            uiState = 'GAME';
+            
+            // 3. 🎯 關鍵修正：強制系統「立刻」生成地表方塊，不再等10幀後才加載！
+            updateTerrain(); 
+            
+            controls.lock();
+        });
+        
+        controls.addEventListener('lock', () => { 
+            uiState = 'GAME'; 
+            document.getElementById('pause-menu').style.display = 'none'; 
+            document.getElementById('inventory-menu').style.display = 'none'; 
+            document.getElementById('death-menu').style.display = 'none';
+        });
         controls.addEventListener('unlock', () => {
             if (uiState === 'GAME') uiState = 'PAUSE';
-            if (uiState === 'PAUSE') { document.getElementById('pause-menu').style.display = 'flex'; document.getElementById('inventory-menu').style.display = 'none'; }
-            else if (uiState === 'INVENTORY') { document.getElementById('pause-menu').style.display = 'none'; document.getElementById('inventory-menu').style.display = 'flex'; renderCraftingMenu(); }
+            
+            document.getElementById('pause-menu').style.display = uiState === 'PAUSE' ? 'flex' : 'none'; 
+            document.getElementById('inventory-menu').style.display = uiState === 'INVENTORY' ? 'flex' : 'none'; 
+            document.getElementById('death-menu').style.display = uiState === 'DEATH' ? 'flex' : 'none';
+
+            if (uiState === 'INVENTORY') renderCraftingMenu();
         });
 
         const move = { forward: false, backward: false, left: false, right: false };
@@ -304,24 +414,22 @@
             if (e.code === 'KeyA') move.left = false; if (e.code === 'KeyD') move.right = false;
         });
 
-        // --- 6. 採集與建造 (射線目標大優化，只偵測活躍方塊) ---
+        // --- 6. 挖掘與建造 ---
         const raycaster = new THREE.Raycaster(); const centerMouse = new THREE.Vector2(0, 0);
 
         document.addEventListener('mousedown', (e) => {
             if (uiState !== 'GAME' || !controls.isLocked) return;
             raycaster.setFromCamera(centerMouse, camera); raycaster.far = 10;
-            const meshesArray = Array.from(activeMeshes.values());
-            const intersects = raycaster.intersectObjects(meshesArray); 
+            const intersects = raycaster.intersectObjects(Array.from(activeMeshes.values())); 
 
             if (intersects.length > 0) {
                 const intersect = intersects[0]; const targetObj = intersect.object; const typeId = targetObj.userData.typeId;
 
-                if (e.button === 0) { // 左鍵：採集
-                    if (typeId === 8) return; // 基岩不可破壞
+                if (e.button === 0) { 
+                    if (typeId === 8) return; 
 
                     if (inventory[typeId] !== undefined) { inventory[typeId]++; updateInventoryUI(); }
                     
-                    // 從畫面與記憶體數據中雙重移除
                     const mKey = getBlockKey(targetObj.position.x, targetObj.position.y, targetObj.position.z);
                     scene.remove(targetObj); activeMeshes.delete(mKey);
 
@@ -329,24 +437,23 @@
                     if (list) { const idx = list.findIndex(b => b.y === targetObj.userData.y); if (idx > -1) list.splice(idx, 1); }
                     highlightBox.visible = false;
 
-                } else if (e.button === 2) { // 右鍵：建造
+                } else if (e.button === 2) { 
                     if (inventory[selectedSlot] > 0) {
                         const normal = intersect.face.normal;
                         const newPos = targetObj.position.clone().add(normal.clone().multiplyScalar(BLOCK_SIZE));
                         const pPos = controls.getObject().position;
-                        if (Math.abs(newPos.x - pPos.x) < 1.4 && Math.abs(newPos.z - pPos.z) < 1.4 && newPos.y > pPos.y - 2.8 && newPos.y < pPos.y + 0.5) return; 
+                        
+                        if (Math.abs(newPos.x - pPos.x) < 1.4 && Math.abs(newPos.z - pPos.z) < 1.4 && newPos.y > pPos.y - 2.6 && newPos.y < pPos.y + 0.5) return; 
 
                         const ncx = Math.round(newPos.x / BLOCK_SIZE); const ncz = Math.round(newPos.z / BLOCK_SIZE); const nby = Math.round(newPos.y / BLOCK_SIZE);
                         
-                        // 寫入數據
                         if (!worldData.has(`${ncx},${ncz}`)) worldData.set(`${ncx},${ncz}`, []);
                         worldData.get(`${ncx},${ncz}`).push({ y: nby, typeId: selectedSlot });
 
-                        // 立即生成網格
                         const mKey = getBlockKey(newPos.x, newPos.y, newPos.z);
                         const block = new THREE.Mesh(blockGeometry, itemsDict[selectedSlot].mat);
                         block.position.copy(newPos);
-                        block.userData = { typeId: selectedSlot, name: itemsDict[selectedSlot].name, cx: ncx, cz: ncz, y: nby };
+                        block.userData = { typeId: selectedSlot, cx: ncx, cz: ncz, y: nby };
                         scene.add(block); activeMeshes.set(mKey, block);
 
                         inventory[selectedSlot]--; updateInventoryUI();
@@ -355,9 +462,10 @@
             }
         });
 
-        // --- 7. 遊戲主迴圈 ---
+        // --- 7. 物理碰撞與主渲染迴圈 ---
         const clock = new THREE.Clock(); const downRay = new THREE.Raycaster(); 
         let frames = 0, lastTime = performance.now();
+        
         updateTerrain();
 
         function animate() {
@@ -365,11 +473,18 @@
             frames++; const timeNow = performance.now();
             if (timeNow >= lastTime + 1000) { document.getElementById('fps-counter').innerText = frames; frames = 0; lastTime = timeNow; }
 
-            // 每 12 幀才計算一次地形更新，大幅降低 CPU 負擔
-            if (frames % 12 === 0 && controls.isLocked) updateTerrain();
+            if (frames % 10 === 0 && controls.isLocked) updateTerrain();
 
             if (controls.isLocked) {
                 const delta = Math.min(clock.getDelta(), 0.1); const playerObj = controls.getObject();
+                
+                if (!canJump) {
+                    if (playerObj.position.y > highestY || !wasInAir) {
+                        highestY = playerObj.position.y;
+                    }
+                    wasInAir = true;
+                }
+
                 velocity.x -= velocity.x * 10.0 * delta; velocity.z -= velocity.z * 10.0 * delta;
                 direction.z = Number(move.forward) - Number(move.backward); direction.x = Number(move.right) - Number(move.left);
                 direction.normalize();
@@ -388,16 +503,36 @@
 
                 velocity.y -= 9.8 * 3.5 * delta; playerObj.position.y += velocity.y * delta;
 
-                // 站在方塊上
                 downRay.set(playerObj.position, new THREE.Vector3(0, -1, 0)); downRay.far = 5;
                 const floorIntersects = downRay.intersectObjects(Array.from(activeMeshes.values()));
                 canJump = false;
-                if (floorIntersects.length > 0 && playerObj.position.y <= floorIntersects[0].point.y + 3) {
-                    velocity.y = Math.max(0, velocity.y); playerObj.position.y = floorIntersects[0].point.y + 3; canJump = true;
-                }
-                if (playerObj.position.y < -30) { velocity.y = 0; playerObj.position.y = 25; }
 
-                // 準心高亮
+                if (floorIntersects.length > 0 && playerObj.position.y <= floorIntersects[0].point.y + 3) {
+                    velocity.y = Math.max(0, velocity.y); 
+                    playerObj.position.y = floorIntersects[0].point.y + 3; 
+                    canJump = true;
+
+                    if (wasInAir) {
+                        let fallDistance = (highestY - playerObj.position.y) / BLOCK_SIZE;
+                        if (fallDistance > 3) {
+                            let damage = Math.floor((fallDistance - 3) * 2);
+                            if (damage > 0) takeDamage(damage);
+                        }
+                        wasInAir = false; 
+                    }
+                }
+                
+                // 掉落虛空保護 (連鎖修復)
+                if (playerObj.position.y < -30) { 
+                    takeDamage(20); 
+                    if (health > 0) {
+                        playerObj.position.set(0, getSurfaceHeight(0, 0), 0); 
+                        velocity.set(0, 0, 0);
+                        wasInAir = false;
+                        updateTerrain(); // 🎯 同理，瞬間加載方塊防止再次掉落
+                    }
+                }
+
                 raycaster.setFromCamera(centerMouse, camera); raycaster.far = 10;
                 const intersects = raycaster.intersectObjects(Array.from(activeMeshes.values()));
                 if (intersects.length > 0) { highlightBox.position.copy(intersects[0].object.position); highlightBox.visible = true; } 
