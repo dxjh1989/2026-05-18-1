@@ -1,9 +1,11 @@
+</body>
+</html>
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minecraft Web - Survival Edition</title>
+    <title>Minecraft Web - Universal Compatibility Edition</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: 'Courier New', monospace; user-select: none; }
         
@@ -22,16 +24,19 @@
         #crosshair::before { top: 7px; left: 0; width: 16px; height: 2px; }
         #crosshair::after { top: 0; left: 7px; width: 2px; height: 16px; }
 
-        /* 血量條容器 */
-        #health-container {
-            position: absolute; bottom: 64px; left: 50%; transform: translateX(-50%);
-            display: flex; gap: 2px; font-size: 20px; z-index: 10; pointer-events: none;
-            letter-spacing: -2px;
+        #status-bars {
+            position: absolute; bottom: 70px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 40px; z-index: 10; pointer-events: none;
+        }
+        .bar-container {
+            display: flex; gap: 2px; font-size: 20px; letter-spacing: -2px;
+            text-shadow: 1px 1px 0 #000;
         }
 
         #hotbar-container {
             position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
-            display: flex; background: rgba(30, 30, 30, 0.7); border: 2px solid #111; padding: 2px; gap: 2px; z-index: 10;
+            display: flex; flex-wrap: wrap; justify-content: center; max-width: 95vw;
+            background: rgba(30, 30, 30, 0.7); border: 2px solid #111; padding: 2px; gap: 2px; z-index: 10;
         }
         .hotbar-slot {
             position: relative; width: 44px; height: 44px; background: rgba(139, 139, 139, 0.8); border: 2px solid #555;
@@ -43,7 +48,7 @@
 
         .overlay-menu {
             position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: rgba(0, 0, 0, 0.7); color: white; display: none; flex-direction: column;
+            background: rgba(0, 0, 0, 0.7); color: white; display: none; flex-wrap: wrap; flex-direction: column;
             align-items: center; justify-content: center; z-index: 50;
         }
         .title { font-size: 40px; margin-bottom: 20px; text-shadow: 3px 3px 0 #000; }
@@ -57,13 +62,13 @@
         }
         .recipe { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 2px solid #888; }
         .recipe:last-child { border-bottom: none; }
-        .tips { position: absolute; bottom: 90px; color: white; font-size: 16px; text-shadow: 1px 1px 0 #000; z-index: 10; text-align: center; width: 100%; pointer-events: none;}
+        .tips { position: absolute; bottom: 100px; color: white; font-size: 16px; text-shadow: 1px 1px 0 #000; z-index: 10; text-align: center; width: 100%; pointer-events: none;}
 
-        /* 受傷紅光特效 */
         #damage-flash {
             position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
             background: rgba(255, 0, 0, 0.35); display: none; pointer-events: none; z-index: 45;
         }
+        .env-notice { font-size: 13px; color: #bbb; margin-top: 15px; text-align: center; line-height: 1.5; max-width: 80%; }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
@@ -71,24 +76,31 @@
 <body>
 
     <div id="f3-menu">
-        Minecraft Web Smooth Edition<br>FPS: <span id="fps-counter">0</span><br>
-        Rendered Blocks: <span id="block-counter">0</span><br>
+        Minecraft Web Universal Edition<br>FPS: <span id="fps-counter">0</span><br>
+        Blocks: <span id="block-counter">0</span> | Mobs: <span id="mob-counter">0</span><br>
         XYZ: <span id="debug-xyz">0 / 0 / 0</span>
     </div>
     <div id="crosshair"></div>
     <div id="damage-flash"></div>
-    <div class="tips">W A S D: 移動 | 空白鍵: 跳躍 | 左鍵: 挖礦 | 右鍵: 放方塊 | E: 背包合成 | F3: 效能資訊</div>
+    <div class="tips">W A S D: 移動 | 空白鍵: 跳躍 (無自動上樓) | 左鍵: 破壞/轉視角 | 右鍵: 放置/吃肉</div>
     
-    <div id="health-container"></div>
+    <div id="status-bars">
+        <div id="health-container" class="bar-container"></div>
+        <div id="hunger-container" class="bar-container"></div>
+    </div>
     <div id="hotbar-container"></div>
 
     <div id="pause-menu" class="overlay-menu" style="display: flex;">
         <div class="title">Minecraft Web</div>
-        <div class="btn" id="resume-btn">開始遊戲</div>
+        <div class="btn" id="resume-btn">開始生存</div>
+        <div class="env-notice">
+            💡 智慧相容提示：若點擊後滑鼠未隱藏，代表瀏覽器限制了當前視窗。<br>
+            此時您可以**「按住滑鼠左鍵並拖曳」**來旋轉視角！下載為 .html 檔案單獨開啟可體驗完美全螢幕鎖定。
+        </div>
     </div>
 
     <div id="inventory-menu" class="overlay-menu">
-        <div class="title">合成背包 (Inventory & Crafting)</div>
+        <div class="title">合成背包</div>
         <div id="crafting-panel">
             <h3 style="margin-top: 0;">可用配方：</h3>
             <div id="recipes-container"></div>
@@ -97,12 +109,12 @@
     </div>
 
     <div id="death-menu" class="overlay-menu" style="background: rgba(100, 0, 0, 0.85);">
-        <div class="title" style="color: #ff3333; font-size: 60px;">你死了！</div>
+        <div class="title" style="color: #ff3333; font-size: 60px;">你死掉了！</div>
         <div class="btn" id="respawn-btn">重新投胎</div>
     </div>
 
     <script>
-        // --- 1. 場景與渲染器初始化 ---
+        // --- 1. 場景與渲染器 ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x87CEEB);
         scene.fog = new THREE.Fog(0x87CEEB, 10, 24); 
@@ -112,7 +124,7 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.85); scene.add(ambientLight);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.9); scene.add(ambientLight);
         const dirLight = new THREE.DirectionalLight(0xffffff, 0.35); dirLight.position.set(20, 40, 20); scene.add(dirLight);
 
         // --- 2. 材質貼圖生成器 ---
@@ -128,10 +140,7 @@
             }
             if (type === 'dirt') drawNoise('#684A33', 0.2);
             else if (type === 'grass_top') drawNoise('#5B8731', 0.15);
-            else if (type === 'grass_side') {
-                drawNoise('#684A33', 0.2); ctx.fillStyle = '#5B8731';
-                for(let x=0; x<16; x++) ctx.fillRect(x, 0, 1, 3 + Math.floor(Math.random()*3));
-            }
+            else if (type === 'grass_side') { drawNoise('#684A33', 0.2); ctx.fillStyle = '#5B8731'; for(let x=0; x<16; x++) ctx.fillRect(x, 0, 1, 3 + Math.floor(Math.random()*3)); }
             else if (type === 'stone') drawNoise('#7D7D7D', 0.1);
             else if (type === 'planks') { drawNoise('#a07e53', 0.1); ctx.fillStyle = 'rgba(0,0,0,0.2)'; for(let x=0; x<16; x+=4) ctx.fillRect(x, 0, 1, 16); }
             else if (type === 'log_side') { drawNoise('#5c4033', 0.3); ctx.fillStyle = 'rgba(0,0,0,0.3)'; for(let x=0; x<16; x+=2) ctx.fillRect(x, 0, 1, 16); }
@@ -139,6 +148,11 @@
             else if (type === 'leaves') { drawNoise('#2d8c2d', 0.4); ctx.globalCompositeOperation = 'destination-out'; for(let i=0; i<30; i++) ctx.fillRect(Math.floor(Math.random()*16), Math.floor(Math.random()*16), 2, 2); }
             else if (type === 'glass') { ctx.fillStyle = 'rgba(200, 240, 255, 0.3)'; ctx.fillRect(0, 0, 16, 16); ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'; ctx.fillRect(1, 1, 14, 1); }
             else if (type === 'bedrock') { drawNoise('#2e2e2e', 0.4); ctx.fillStyle = '#141414'; for(let i=0; i<25; i++) ctx.fillRect(Math.floor(Math.random()*15), Math.floor(Math.random()*15), 2, 2); }
+            else if (type === 'coal_ore') { drawNoise('#7D7D7D', 0.1); ctx.fillStyle = '#222'; for(let i=0; i<14; i++) ctx.fillRect(Math.random()*14+1, Math.random()*14+1, 2, 2); }
+            else if (type === 'iron_ore') { drawNoise('#7D7D7D', 0.1); ctx.fillStyle = '#D8AF93'; for(let i=0; i<12; i++) ctx.fillRect(Math.random()*14+1, Math.random()*14+1, 2, 2); }
+            else if (type === 'gold_ore') { drawNoise('#7D7D7D', 0.1); ctx.fillStyle = '#FCEE4B'; for(let i=0; i<10; i++) ctx.fillRect(Math.random()*14+1, Math.random()*14+1, 2, 2); }
+            else if (type === 'diamond_ore') { drawNoise('#7D7D7D', 0.1); ctx.fillStyle = '#5DECF4'; for(let i=0; i<8; i++) ctx.fillRect(Math.random()*14+1, Math.random()*14+1, 2, 2); }
+            else if (type === 'meat') { drawNoise('#B22222', 0.2); ctx.fillStyle = '#FFC0CB'; ctx.fillRect(4, 4, 3, 3); ctx.fillRect(9, 7, 3, 4); } 
 
             const texture = new THREE.CanvasTexture(canvas); texture.magFilter = THREE.NearestFilter; 
             return { tex: texture, canvas: canvas };
@@ -152,19 +166,23 @@
             5: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('leaves').tex, transparent: true, opacity: 0.85, alphaTest: 0.1 }), name: "樹葉", thumb: generateTexture('leaves').canvas },
             6: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('planks').tex }), name: "木板", thumb: generateTexture('planks').canvas },
             7: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('glass').tex, transparent: true, opacity: 0.8 }), name: "玻璃", thumb: generateTexture('glass').canvas },
-            8: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('bedrock').tex }), name: "基岩", thumb: null }
+            8: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('coal_ore').tex }), name: "煤礦", thumb: generateTexture('coal_ore').canvas },
+            9: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('iron_ore').tex }), name: "鐵礦", thumb: generateTexture('iron_ore').canvas },
+            10: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('gold_ore').tex }), name: "金礦", thumb: generateTexture('gold_ore').canvas },
+            11: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('diamond_ore').tex }), name: "鑽石礦", thumb: generateTexture('diamond_ore').canvas },
+            12: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('bedrock').tex }), name: "基岩", thumb: null },
+            13: { mat: new THREE.MeshStandardMaterial({ map: generateTexture('meat').tex }), name: "生肉", thumb: generateTexture('meat').canvas }
         };
 
-        // --- 3. 玩家數據與背包數據設定 ---
-        const INVENTORY_SLOTS = 7; 
+        // --- 3. 狀態與背包 UI ---
+        const INVENTORY_SLOTS = 13; 
         let selectedSlot = 1;
-        let inventory = { 1:15, 2:10, 3:5, 4:4, 5:0, 6:0, 7:0 }; 
+        let inventory = { 1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0, 8:0, 9:0, 10:0, 11:0, 12:0, 13:0 }; 
 
-        // 血量控制系統變數
-        let health = 20; 
-        const maxHealth = 20;
-        let highestY = 0;       
-        let wasInAir = false;   
+        let health = 20; const maxHealth = 20;
+        let hunger = 20; const maxHunger = 20; let hungerTimer = 0;
+        let highestY = 0; let wasInAir = false;   
+        let uiState = 'PAUSE'; 
 
         const recipes = [
             { inputId: 4, inputQty: 1, outputId: 6, outputQty: 4, desc: "木板 x4 (需 1x 原木)" },
@@ -173,99 +191,106 @@
         ];
 
         function updateHealthUI() {
-            const container = document.getElementById('health-container');
-            container.innerHTML = '';
+            const container = document.getElementById('health-container'); container.innerHTML = '';
             for (let i = 0; i < 10; i++) {
                 let heartIndex = i * 2;
-                if (health >= heartIndex + 2) {
-                    container.innerHTML += '❤️'; 
-                } else if (health === heartIndex + 1) {
-                    container.innerHTML += '💔'; 
-                } else {
-                    container.innerHTML += '🖤'; 
-                }
+                if (health >= heartIndex + 2) container.innerHTML += '❤️'; 
+                else if (health === heartIndex + 1) container.innerHTML += '💔'; 
+                else container.innerHTML += '🖤'; 
+            }
+        }
+
+        function updateHungerUI() {
+            const container = document.getElementById('hunger-container'); container.innerHTML = '';
+            for (let i = 0; i < 10; i++) {
+                let hIndex = i * 2;
+                if (hunger >= hIndex + 2) container.innerHTML += '🍖'; 
+                else if (hunger === hIndex + 1) container.innerHTML += '🍗'; 
+                else container.innerHTML += '🦴'; 
             }
         }
 
         function takeDamage(amount) {
             if (uiState === 'DEATH') return;
-            health -= amount;
-            if (health < 0) health = 0;
-            updateHealthUI();
-
+            health -= amount; if (health < 0) health = 0; updateHealthUI();
             const flash = document.getElementById('damage-flash');
-            flash.style.display = 'block';
-            setTimeout(() => flash.style.display = 'none', 180);
-
-            if (health <= 0) {
-                uiState = 'DEATH';
-                controls.unlock();
-            }
+            flash.style.display = 'block'; setTimeout(() => flash.style.display = 'none', 180);
+            if (health <= 0) { setUIState('DEATH'); }
         }
 
         function renderCraftingMenu() {
-            const container = document.getElementById('recipes-container'); 
-            container.innerHTML = '';
+            const container = document.getElementById('recipes-container'); container.innerHTML = '';
             recipes.forEach(r => {
                 const div = document.createElement('div'); div.className = 'recipe';
                 const text = document.createElement('span'); text.innerText = r.desc;
                 const btn = document.createElement('button'); btn.className = 'btn'; btn.innerText = '合成';
-                
-                if (inventory[r.inputId] < r.inputQty) { 
-                    btn.disabled = true; btn.innerText = '材料不足'; 
-                } else { 
-                    btn.onclick = () => { 
-                        inventory[r.inputId] -= r.inputQty; 
-                        inventory[r.outputId] += r.outputQty; 
-                        updateInventoryUI(); 
-                    }; 
-                }
+                if (inventory[r.inputId] < r.inputQty) { btn.disabled = true; btn.innerText = '材料不足'; } 
+                else { btn.onclick = () => { inventory[r.inputId] -= r.inputQty; inventory[r.outputId] += r.outputQty; updateInventoryUI(); }; }
                 div.appendChild(text); div.appendChild(btn); container.appendChild(div);
             });
         }
 
         function updateInventoryUI() {
             for(let i=1; i<=INVENTORY_SLOTS; i++) {
-                document.getElementById(`count-${i}`).innerText = inventory[i];
-                document.getElementById(`slot-${i}`).style.opacity = inventory[i] > 0 ? "1" : "0.4";
+                if(i === 12) continue; 
+                let slotLabel = document.getElementById(`count-${i}`);
+                if (slotLabel) slotLabel.innerText = inventory[i];
+                let slotDiv = document.getElementById(`slot-${i}`);
+                if (slotDiv) slotDiv.style.opacity = inventory[i] > 0 ? "1" : "0.4";
             }
-            renderCraftingMenu();
+            if(uiState === 'INVENTORY') renderCraftingMenu();
         }
 
         const hotbarContainer = document.getElementById('hotbar-container');
         for(let i=1; i<=INVENTORY_SLOTS; i++) {
+            if(i === 12) continue;
             const slot = document.createElement('div'); 
-            slot.className = `hotbar-slot ${i === selectedSlot ? 'selected' : ''}`; 
-            slot.id = `slot-${i}`;
+            slot.className = `hotbar-slot ${i === selectedSlot ? 'selected' : ''}`; slot.id = `slot-${i}`;
             slot.appendChild(itemsDict[i].thumb); 
-            
-            const lbl = document.createElement('span'); 
-            lbl.className = 'item-count'; lbl.id = `count-${i}`; 
-            lbl.innerText = inventory[i];
-            
-            slot.appendChild(lbl); 
-            hotbarContainer.appendChild(slot);
+            const lbl = document.createElement('span'); lbl.className = 'item-count'; lbl.id = `count-${i}`; lbl.innerText = inventory[i];
+            slot.appendChild(lbl); hotbarContainer.appendChild(slot);
         }
         
-        updateInventoryUI();
-        updateHealthUI(); 
+        document.addEventListener('wheel', (e) => {
+            if (uiState !== 'GAME') return;
+            if (e.deltaY > 0) { selectedSlot++; if(selectedSlot === 12) selectedSlot = 13; if(selectedSlot > INVENTORY_SLOTS) selectedSlot = 1; }
+            else { selectedSlot--; if(selectedSlot === 12) selectedSlot = 11; if(selectedSlot < 1) selectedSlot = INVENTORY_SLOTS; }
+            for(let i=1; i<=INVENTORY_SLOTS; i++) { if(i!==12) document.getElementById('slot-'+i).classList.remove('selected'); }
+            document.getElementById('slot-'+selectedSlot).classList.add('selected');
+        });
 
-        // --- 4. 地形動態生成系統 ---
-        const BLOCK_SIZE = 2;
-        const RENDER_RADIUS = 7; 
-        
-        const worldData = new Map();     
-        const activeMeshes = new Map();   
-        const generatedColumns = new Set(); 
+        updateInventoryUI(); updateHealthUI(); updateHungerUI();
 
+        // --- 4. 地形與生物生成 ---
+        const BLOCK_SIZE = 2; const RENDER_RADIUS = 7; 
+        const worldData = new Map(); const activeMeshes = new Map(); const generatedColumns = new Set(); 
         const blockGeometry = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
         function getBlockKey(x, y, z) { return `${Math.round(x)},${Math.round(y)},${Math.round(z)}`; }
 
         function getSurfaceHeight(px, pz) {
-            const cx = Math.round(px / BLOCK_SIZE);
-            const cz = Math.round(pz / BLOCK_SIZE);
+            const cx = Math.round(px / BLOCK_SIZE); const cz = Math.round(pz / BLOCK_SIZE);
             const height = Math.floor((Math.sin(cx/8) + Math.cos(cz/10) + Math.sin((cx+cz)/14)) * 2.5);
-            return (height * BLOCK_SIZE) + (BLOCK_SIZE / 2) + 2.9; 
+            return (height * BLOCK_SIZE) + (BLOCK_SIZE / 2); 
+        }
+
+        function isCave(cx, cy, cz) {
+            if (cy > -4) return false; 
+            const noise1 = Math.sin(cx / 3.5) * Math.cos(cy / 3.5) * Math.sin(cz / 3.5);
+            const noise2 = Math.sin((cx + cy) / 7) * Math.cos((cy + cz) / 7);
+            return (noise1 + noise2) > 0.65;
+        }
+
+        const mobs = [];
+        const pigGeometry = new THREE.BoxGeometry(1.2, 1.2, 1.8);
+        const pigMaterial = new THREE.MeshStandardMaterial({ color: 0xffaacc }); 
+
+        function spawnPig(x, y, z) {
+            if (mobs.length > 15) return; 
+            const pig = new THREE.Mesh(pigGeometry, pigMaterial.clone());
+            pig.position.set(x, y, z);
+            pig.userData = { isMob: true, hp: 10, dir: new THREE.Vector2() };
+            scene.add(pig);
+            mobs.push(pig);
         }
 
         function initColumnData(cx, cz) {
@@ -277,33 +302,37 @@
             const list = worldData.get(colKey);
 
             let height = Math.floor((Math.sin(cx/8) + Math.cos(cz/10) + Math.sin((cx+cz)/14)) * 2.5);
-            
             list.push({ y: height, typeId: 1 });     
             list.push({ y: height - 1, typeId: 2 }); 
 
-            const bedrockLevel = -10;
+            const bedrockLevel = -40; 
             for (let y = height - 2; y > bedrockLevel; y--) {
-                list.push({ y: y, typeId: 3 });      
+                if (isCave(cx, y, cz)) continue;
+                let type = 3; let rand = Math.random();
+                if (y <= bedrockLevel + 8 && rand < 0.005) type = 11;      
+                else if (y < -20 && rand < 0.015) type = 10;               
+                else if (y < -8 && rand < 0.035) type = 9;                 
+                else if (rand < 0.065) type = 8;                           
+                list.push({ y: y, typeId: type });      
             }
-            list.push({ y: bedrockLevel, typeId: 8 });
+            list.push({ y: bedrockLevel, typeId: 12 }); 
 
-            // 🎯 確保重生點 (0,0) 不會長出樹木把你卡住
             if (Math.random() < 0.04 && (cx !== 0 || cz !== 0)) {
                 let treeH = 3 + Math.floor(Math.random() * 2);
                 for(let ty=1; ty<=treeH; ty++) list.push({ y: height + ty, typeId: 4 }); 
-                
                 for(let lx=-1; lx<=1; lx++) {
                     for(let lz=-1; lz<=1; lz++) {
                         const nKey = `${cx+lx},${cz+lz}`;
                         if (!worldData.has(nKey)) worldData.set(nKey, []);
                         const nList = worldData.get(nKey);
-                        if (lx===0 && lz===0) {
-                            nList.push({ y: height+treeH+1, typeId: 5 }); nList.push({ y: height+treeH+2, typeId: 5 });
-                        } else {
-                            nList.push({ y: height+treeH, typeId: 5 }); nList.push({ y: height+treeH+1, typeId: 5 });
-                        }
+                        if (lx===0 && lz===0) { nList.push({ y: height+treeH+1, typeId: 5 }); nList.push({ y: height+treeH+2, typeId: 5 }); } 
+                        else { nList.push({ y: height+treeH, typeId: 5 }); nList.push({ y: height+treeH+1, typeId: 5 }); }
                     }
                 }
+            }
+
+            if (Math.random() < 0.03) {
+                spawnPig(cx * BLOCK_SIZE, (height * BLOCK_SIZE) + 3, cz * BLOCK_SIZE);
             }
         }
 
@@ -313,15 +342,8 @@
             const pz = Math.round(playerObj.position.z / BLOCK_SIZE);
 
             const toDelete = [];
-            activeMeshes.forEach((mesh, key) => {
-                if (Math.abs(mesh.userData.cx - px) > RENDER_RADIUS || Math.abs(mesh.userData.cz - pz) > RENDER_RADIUS) {
-                    toDelete.push(key);
-                }
-            });
-            toDelete.forEach(key => {
-                scene.remove(activeMeshes.get(key));
-                activeMeshes.delete(key);
-            });
+            activeMeshes.forEach((mesh, key) => { if (Math.abs(mesh.userData.cx - px) > RENDER_RADIUS || Math.abs(mesh.userData.cz - pz) > RENDER_RADIUS) toDelete.push(key); });
+            toDelete.forEach(key => { scene.remove(activeMeshes.get(key)); activeMeshes.delete(key); });
 
             for (let x = px - RENDER_RADIUS; x <= px + RENDER_RADIUS; x++) {
                 for (let z = pz - RENDER_RADIUS; z <= pz + RENDER_RADIUS; z++) {
@@ -330,13 +352,10 @@
                     list.forEach(b => {
                         const gx = x * BLOCK_SIZE; const gy = b.y * BLOCK_SIZE; const gz = z * BLOCK_SIZE;
                         const mKey = getBlockKey(gx, gy, gz);
-
                         if (!activeMeshes.has(mKey)) {
                             const block = new THREE.Mesh(blockGeometry, itemsDict[b.typeId].mat);
-                            block.position.set(gx, gy, gz);
-                            block.userData = { typeId: b.typeId, cx: x, cz: z, y: b.y };
-                            scene.add(block);
-                            activeMeshes.set(mKey, block);
+                            block.position.set(gx, gy, gz); block.userData = { typeId: b.typeId, cx: x, cz: z, y: b.y };
+                            scene.add(block); activeMeshes.set(mKey, block);
                         }
                     });
                 }
@@ -347,51 +366,39 @@
         const highlightBox = new THREE.LineSegments(new THREE.EdgesGeometry(blockGeometry), new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 }));
         highlightBox.visible = false; scene.add(highlightBox);
 
-        // --- 5. 控制器與 UI 狀態綁定 ---
-        const controls = new THREE.PointerLockControls(camera, document.body); 
-        scene.add(controls.getObject());
-        
-        controls.getObject().position.set(0, getSurfaceHeight(0, 0), 0); 
-        let uiState = 'PAUSE';
+        // --- 5. 核心控制管理與動態視角備援 ---
+        const controls = new THREE.PointerLockControls(camera, document.body); scene.add(controls.getObject());
+        controls.getObject().position.set(0, getSurfaceHeight(0, 0) + 2.9, 0); 
 
-        document.getElementById('resume-btn').addEventListener('click', () => controls.lock());
-        document.getElementById('close-inv-btn').addEventListener('click', () => controls.lock());
-        
-        // 🎯 重新優化的重生按鈕
-        document.getElementById('respawn-btn').addEventListener('click', () => {
-            health = maxHealth;
-            updateHealthUI();
-            
-            // 1. 精準放回原點地表
-            controls.getObject().position.set(0, getSurfaceHeight(0, 0), 0); 
-            // 2. 清除死前的墜落速度，重置掉落判定
-            velocity.set(0, 0, 0);
-            highestY = getSurfaceHeight(0, 0); 
-            wasInAir = false; 
-            
-            uiState = 'GAME';
-            
-            // 3. 🎯 關鍵修正：強制系統「立刻」生成地表方塊，不再等10幀後才加載！
-            updateTerrain(); 
-            
-            controls.lock();
-        });
-        
-        controls.addEventListener('lock', () => { 
-            uiState = 'GAME'; 
-            document.getElementById('pause-menu').style.display = 'none'; 
-            document.getElementById('inventory-menu').style.display = 'none'; 
-            document.getElementById('death-menu').style.display = 'none';
-        });
-        controls.addEventListener('unlock', () => {
-            if (uiState === 'GAME') uiState = 'PAUSE';
-            
+        function setUIState(state) {
+            uiState = state;
             document.getElementById('pause-menu').style.display = uiState === 'PAUSE' ? 'flex' : 'none'; 
             document.getElementById('inventory-menu').style.display = uiState === 'INVENTORY' ? 'flex' : 'none'; 
             document.getElementById('death-menu').style.display = uiState === 'DEATH' ? 'flex' : 'none';
-
+            
+            if (uiState === 'GAME') {
+                try { controls.lock(); } catch(e) {} // 嘗試鎖定滑鼠，失敗也不會卡住
+            } else {
+                try { controls.unlock(); } catch(e) {}
+            }
             if (uiState === 'INVENTORY') renderCraftingMenu();
+        }
+
+        document.getElementById('resume-btn').addEventListener('click', () => setUIState('GAME'));
+        document.getElementById('close-inv-btn').addEventListener('click', () => setUIState('GAME'));
+        document.getElementById('respawn-btn').addEventListener('click', () => {
+            health = maxHealth; hunger = maxHunger; updateHealthUI(); updateHungerUI();
+            controls.getObject().position.set(0, getSurfaceHeight(0, 0) + 2.9, 0); 
+            velocity.set(0, 0, 0); highestY = getSurfaceHeight(0, 0) + 2.9; wasInAir = false; 
+            updateTerrain(); setUIState('GAME');
         });
+        
+        controls.addEventListener('lock', () => { if(uiState !== 'GAME') setUIState('GAME'); });
+        controls.addEventListener('unlock', () => { if (uiState === 'GAME') setUIState('PAUSE'); });
+
+        // 備援機制：當滑鼠無法鎖定時，允許按住左鍵拖曳旋轉視角
+        let isDragging = false;
+        let prevMousePos = { x: 0, y: 0 };
 
         const move = { forward: false, backward: false, left: false, right: false };
         let velocity = new THREE.Vector3(), direction = new THREE.Vector3(), canJump = false, showF3 = false;
@@ -402,10 +409,10 @@
             if (e.code === 'KeyA') move.left = true; if (e.code === 'KeyD') move.right = true;
             if (e.code === 'Space' && canJump) { velocity.y = 11; canJump = false; }
             if (e.code === 'F3') { e.preventDefault(); showF3 = !showF3; document.getElementById('f3-menu').style.display = showF3 ? 'block' : 'none'; }
-            if (e.code === 'KeyE') { uiState = 'INVENTORY'; controls.unlock(); }
-            if (e.key >= '1' && e.key <= INVENTORY_SLOTS.toString()) {
+            if (e.code === 'KeyE') { if (uiState === 'GAME') setUIState('INVENTORY'); else if (uiState === 'INVENTORY') setUIState('GAME'); }
+            if (e.key >= '1' && e.key <= '9') { 
                 selectedSlot = parseInt(e.key);
-                for(let i=1; i<=INVENTORY_SLOTS; i++) document.getElementById('slot-'+i).classList.remove('selected');
+                for(let i=1; i<=INVENTORY_SLOTS; i++) { if(i!==12) document.getElementById('slot-'+i).classList.remove('selected'); }
                 document.getElementById('slot-'+selectedSlot).classList.add('selected');
             }
         });
@@ -414,137 +421,203 @@
             if (e.code === 'KeyA') move.left = false; if (e.code === 'KeyD') move.right = false;
         });
 
-        // --- 6. 挖掘與建造 ---
-        const raycaster = new THREE.Raycaster(); const centerMouse = new THREE.Vector2(0, 0);
+        // 動態視角拖曳監聽
+        document.addEventListener('mousemove', (e) => {
+            if (uiState !== 'GAME' || controls.isLocked || !isDragging) return;
+            const deltaX = e.clientX - prevMousePos.x;
+            const deltaY = e.clientY - prevMousePos.y;
+            camera.rotation.y -= deltaX * 0.003;
+            camera.rotation.x -= deltaY * 0.003;
+            camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
+            prevMousePos = { x: e.clientX, y: e.clientY };
+        });
+        document.addEventListener('mouseup', () => { isDragging = false; });
 
+        const raycaster = new THREE.Raycaster(); 
         document.addEventListener('mousedown', (e) => {
-            if (uiState !== 'GAME' || !controls.isLocked) return;
-            raycaster.setFromCamera(centerMouse, camera); raycaster.far = 10;
-            const intersects = raycaster.intersectObjects(Array.from(activeMeshes.values())); 
+            if (uiState !== 'GAME') return;
+            
+            // 如果沒鎖定滑鼠，記錄拖曳起點
+            if (!controls.isLocked) {
+                isDragging = true;
+                prevMousePos = { x: e.clientX, y: e.clientY };
+            }
 
+            if (e.button === 2 && selectedSlot === 13) {
+                if (hunger < 20 && inventory[13] > 0) {
+                    inventory[13]--; hunger = Math.min(20, hunger + 6); updateInventoryUI(); updateHungerUI();
+                }
+                return; 
+            }
+
+            // 精準映射：沒鎖定滑鼠時使用點擊位置進行射線判定，鎖定時使用中心點
+            const mouseCoords = new THREE.Vector2();
+            if (controls.isLocked) {
+                mouseCoords.set(0, 0);
+            } else {
+                mouseCoords.x = (e.clientX / window.innerWidth) * 2 - 1;
+                mouseCoords.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            }
+
+            raycaster.setFromCamera(mouseCoords, camera); raycaster.far = 10;
+            const interactables = [...Array.from(activeMeshes.values()), ...mobs];
+            const intersects = raycaster.intersectObjects(interactables); 
+            
             if (intersects.length > 0) {
-                const intersect = intersects[0]; const targetObj = intersect.object; const typeId = targetObj.userData.typeId;
+                const intersect = intersects[0]; const targetObj = intersect.object; 
 
+                if (targetObj.userData.isMob) {
+                    if (e.button === 0 && !isDragging) { // 防止單純拖曳畫面變成砍豬
+                        targetObj.userData.hp -= 5; targetObj.material.color.setHex(0xff0000); 
+                        setTimeout(() => { if(targetObj.material) targetObj.material.color.setHex(0xffaacc); }, 200);
+                        if (targetObj.userData.hp <= 0) { 
+                            scene.remove(targetObj); mobs.splice(mobs.indexOf(targetObj), 1);
+                            inventory[13]++; updateInventoryUI();
+                        }
+                    }
+                    return; 
+                }
+
+                const typeId = targetObj.userData.typeId;
                 if (e.button === 0) { 
-                    if (typeId === 8) return; 
-
+                    if (typeId === 12) return; 
                     if (inventory[typeId] !== undefined) { inventory[typeId]++; updateInventoryUI(); }
-                    
                     const mKey = getBlockKey(targetObj.position.x, targetObj.position.y, targetObj.position.z);
                     scene.remove(targetObj); activeMeshes.delete(mKey);
-
                     const list = worldData.get(`${targetObj.userData.cx},${targetObj.userData.cz}`);
                     if (list) { const idx = list.findIndex(b => b.y === targetObj.userData.y); if (idx > -1) list.splice(idx, 1); }
                     highlightBox.visible = false;
-
                 } else if (e.button === 2) { 
-                    if (inventory[selectedSlot] > 0) {
-                        const normal = intersect.face.normal;
-                        const newPos = targetObj.position.clone().add(normal.clone().multiplyScalar(BLOCK_SIZE));
+                    if (inventory[selectedSlot] > 0 && selectedSlot !== 13) { 
+                        const normal = intersect.face.normal; const newPos = targetObj.position.clone().add(normal.clone().multiplyScalar(BLOCK_SIZE));
                         const pPos = controls.getObject().position;
-                        
                         if (Math.abs(newPos.x - pPos.x) < 1.4 && Math.abs(newPos.z - pPos.z) < 1.4 && newPos.y > pPos.y - 2.6 && newPos.y < pPos.y + 0.5) return; 
-
                         const ncx = Math.round(newPos.x / BLOCK_SIZE); const ncz = Math.round(newPos.z / BLOCK_SIZE); const nby = Math.round(newPos.y / BLOCK_SIZE);
-                        
                         if (!worldData.has(`${ncx},${ncz}`)) worldData.set(`${ncx},${ncz}`, []);
                         worldData.get(`${ncx},${ncz}`).push({ y: nby, typeId: selectedSlot });
-
                         const mKey = getBlockKey(newPos.x, newPos.y, newPos.z);
                         const block = new THREE.Mesh(blockGeometry, itemsDict[selectedSlot].mat);
-                        block.position.copy(newPos);
-                        block.userData = { typeId: selectedSlot, cx: ncx, cz: ncz, y: nby };
+                        block.position.copy(newPos); block.userData = { typeId: selectedSlot, cx: ncx, cz: ncz, y: nby };
                         scene.add(block); activeMeshes.set(mKey, block);
-
                         inventory[selectedSlot]--; updateInventoryUI();
                     }
                 }
             }
         });
 
-        // --- 7. 物理碰撞與主渲染迴圈 ---
         const clock = new THREE.Clock(); const downRay = new THREE.Raycaster(); 
         let frames = 0, lastTime = performance.now();
-        
         updateTerrain();
 
         function animate() {
             requestAnimationFrame(animate);
             frames++; const timeNow = performance.now();
-            if (timeNow >= lastTime + 1000) { document.getElementById('fps-counter').innerText = frames; frames = 0; lastTime = timeNow; }
+            if (timeNow >= lastTime + 1000) { 
+                document.getElementById('fps-counter').innerText = frames; 
+                document.getElementById('mob-counter').innerText = mobs.length;
+                frames = 0; lastTime = timeNow; 
+            }
+            if (frames % 10 === 0 && uiState === 'GAME') updateTerrain();
 
-            if (frames % 10 === 0 && controls.isLocked) updateTerrain();
-
-            if (controls.isLocked) {
+            if (uiState === 'GAME') {
                 const delta = Math.min(clock.getDelta(), 0.1); const playerObj = controls.getObject();
                 
-                if (!canJump) {
-                    if (playerObj.position.y > highestY || !wasInAir) {
-                        highestY = playerObj.position.y;
-                    }
-                    wasInAir = true;
+                let isMoving = move.forward || move.backward || move.left || move.right;
+                if (isMoving && frames % 10 === 0) hungerTimer++;
+                if (!canJump && frames % 5 === 0) hungerTimer++; 
+
+                if (hungerTimer >= 100) { hunger = Math.max(0, hunger - 1); updateHungerUI(); hungerTimer = 0; }
+                
+                if (frames % 120 === 0) { 
+                    if (hunger === 0) takeDamage(1); 
+                    else if (hunger >= 18 && health < maxHealth) { health++; updateHealthUI(); } 
                 }
 
-                velocity.x -= velocity.x * 10.0 * delta; velocity.z -= velocity.z * 10.0 * delta;
-                direction.z = Number(move.forward) - Number(move.backward); direction.x = Number(move.right) - Number(move.left);
-                direction.normalize();
+                if (!canJump) { if (playerObj.position.y > highestY || !wasInAir) highestY = playerObj.position.y; wasInAir = true; }
 
+                velocity.x -= velocity.x * 10.0 * delta; velocity.z -= velocity.z * 10.0 * delta;
+                direction.z = Number(move.forward) - Number(move.backward); direction.x = Number(move.right) - Number(move.left); direction.normalize();
                 if (move.forward || move.backward) velocity.z -= direction.z * 90.0 * delta;
                 if (move.left || move.right) velocity.x -= direction.x * 90.0 * delta;
 
                 const nextX = playerObj.position.x - velocity.x * delta; const nextZ = playerObj.position.z - velocity.z * delta;
-                const bodyY1 = playerObj.position.y - 1.5; const bodyY2 = playerObj.position.y - 0.5; 
+                
+                const bodyY1 = playerObj.position.y - 2.8; // 腳底
+const bodyY2 = playerObj.position.y - 1.5; // 身體
+const bodyY3 = playerObj.position.y - 0.2; // 脖子
+const bodyY4 = playerObj.position.y + 0.2; // 頭頂
 
-                function isWall(x, y, z) {
-                    return activeMeshes.has(getBlockKey(Math.round(x/BLOCK_SIZE)*BLOCK_SIZE, Math.round(y/BLOCK_SIZE)*BLOCK_SIZE, Math.round(z/BLOCK_SIZE)*BLOCK_SIZE));
-                }
-                if (!isWall(nextX, bodyY1, playerObj.position.z) && !isWall(nextX, bodyY2, playerObj.position.z)) controls.moveRight(-velocity.x * delta);
-                if (!isWall(playerObj.position.x, bodyY1, nextZ) && !isWall(playerObj.position.x, bodyY2, nextZ)) controls.moveForward(-velocity.z * delta);
+function isWall(x, y, z) { return activeMeshes.has(getBlockKey(Math.round(x/BLOCK_SIZE)*BLOCK_SIZE, Math.round(y/BLOCK_SIZE)*BLOCK_SIZE, Math.round(z/BLOCK_SIZE)*BLOCK_SIZE)); }
+
+// 偵測 X 軸與 Z 軸是否撞牆
+const hitWallX = isWall(nextX, bodyY1, playerObj.position.z) || isWall(nextX, bodyY2, playerObj.position.z) || isWall(nextX, bodyY3, playerObj.position.z) || isWall(nextX, bodyY4, playerObj.position.z);
+const hitWallZ = isWall(playerObj.position.x, bodyY1, nextZ) || isWall(playerObj.position.x, bodyY2, nextZ) || isWall(playerObj.position.x, bodyY3, nextZ) || isWall(playerObj.position.x, bodyY4, nextZ);
+
+// 如果沒撞牆，就正常移動
+if (!hitWallX) controls.moveRight(-velocity.x * delta);
+if (!hitWallZ) controls.moveForward(-velocity.z * delta);
+
+// 🏃 新增：智慧自動上樓 (Auto-Jump)
+if ((hitWallX || hitWallZ) && canJump) {
+    // 確保頭頂上方有足夠的空間才自動跳躍，防止在矮洞穴裡無限撞頭
+    if (!isWall(playerObj.position.x, playerObj.position.y + 2.0, playerObj.position.z)) {
+        velocity.y = 11; // 觸發跳躍
+        canJump = false;
+    }
+}
+
+// 處理重力與 Y 軸位移
+velocity.y -= 9.8 * 3.5 * delta; playerObj.position.y += velocity.y * delta;
+
+// 🚧 保持：天花板防卡機制
+if (velocity.y > 0 && isWall(playerObj.position.x, playerObj.position.y + 1.1, playerObj.position.z)) {
+    velocity.y = -1; // 撞到天花板反彈
+    playerObj.position.y -= 0.1; 
+}
+                
+                function isWall(x, y, z) { return activeMeshes.has(getBlockKey(Math.round(x/BLOCK_SIZE)*BLOCK_SIZE, Math.round(y/BLOCK_SIZE)*BLOCK_SIZE, Math.round(z/BLOCK_SIZE)*BLOCK_SIZE)); }
+                
+                if (!isWall(nextX, bodyY1, playerObj.position.z) && !isWall(nextX, bodyY2, playerObj.position.z) && !isWall(nextX, bodyY3, playerObj.position.z)) controls.moveRight(-velocity.x * delta);
+                if (!isWall(playerObj.position.x, bodyY1, nextZ) && !isWall(playerObj.position.x, bodyY2, nextZ) && !isWall(playerObj.position.x, bodyY3, nextZ)) controls.moveForward(-velocity.z * delta);
 
                 velocity.y -= 9.8 * 3.5 * delta; playerObj.position.y += velocity.y * delta;
-
                 downRay.set(playerObj.position, new THREE.Vector3(0, -1, 0)); downRay.far = 5;
-                const floorIntersects = downRay.intersectObjects(Array.from(activeMeshes.values()));
-                canJump = false;
+                const floorIntersects = downRay.intersectObjects(Array.from(activeMeshes.values())); canJump = false;
 
                 if (floorIntersects.length > 0 && playerObj.position.y <= floorIntersects[0].point.y + 3) {
-                    velocity.y = Math.max(0, velocity.y); 
-                    playerObj.position.y = floorIntersects[0].point.y + 3; 
-                    canJump = true;
-
-                    if (wasInAir) {
-                        let fallDistance = (highestY - playerObj.position.y) / BLOCK_SIZE;
-                        if (fallDistance > 3) {
-                            let damage = Math.floor((fallDistance - 3) * 2);
-                            if (damage > 0) takeDamage(damage);
-                        }
+                    velocity.y = Math.max(0, velocity.y); playerObj.position.y = floorIntersects[0].point.y + 3; canJump = true;
+                    if (wasInAir) { 
+                        let fallDist = (highestY - playerObj.position.y) / BLOCK_SIZE; 
+                        if (fallDist > 3) { let dmg = Math.floor((fallDist - 3) * 2); if (dmg > 0) takeDamage(dmg); } 
                         wasInAir = false; 
                     }
                 }
                 
-                // 掉落虛空保護 (連鎖修復)
-                if (playerObj.position.y < -30) { 
-                    takeDamage(20); 
-                    if (health > 0) {
-                        playerObj.position.set(0, getSurfaceHeight(0, 0), 0); 
-                        velocity.set(0, 0, 0);
-                        wasInAir = false;
-                        updateTerrain(); // 🎯 同理，瞬間加載方塊防止再次掉落
-                    }
-                }
+                if (playerObj.position.y < -90) { takeDamage(20); if (health > 0) { playerObj.position.set(0, getSurfaceHeight(0, 0)+2.9, 0); velocity.set(0, 0, 0); wasInAir = false; updateTerrain(); } }
 
-                raycaster.setFromCamera(centerMouse, camera); raycaster.far = 10;
-                const intersects = raycaster.intersectObjects(Array.from(activeMeshes.values()));
-                if (intersects.length > 0) { highlightBox.position.copy(intersects[0].object.position); highlightBox.visible = true; } 
-                else highlightBox.visible = false;
+                // 亮框預覽核心射線
+                const mouseCoords = new THREE.Vector2();
+                if (controls.isLocked) mouseCoords.set(0, 0);
+                else mouseCoords.set((prevMousePos.x / window.innerWidth) * 2 - 1, -(prevMousePos.y / window.innerHeight) * 2 + 1);
 
-                if (showF3) document.getElementById('debug-xyz').innerText = `${playerObj.position.x.toFixed(1)} / ${playerObj.position.y.toFixed(1)} / ${playerObj.position.z.toFixed(1)}`;
+                raycaster.setFromCamera(controls.isLocked ? new THREE.Vector2(0,0) : mouseCoords, camera); raycaster.far = 10;
+                const interactables = [...Array.from(activeMeshes.values()), ...mobs];
+                const intersects = raycaster.intersectObjects(interactables);
+                if (intersects.length > 0 && !intersects[0].object.userData.isMob) { highlightBox.position.copy(intersects[0].object.position); highlightBox.visible = true; } else highlightBox.visible = false;
+                if (showF3) document.getElementById('debug-xyz').innerText = `${playerObj.position.x.toFixed(1)} / ${(playerObj.position.y/BLOCK_SIZE).toFixed(1)} / ${playerObj.position.z.toFixed(1)}`;
+            
+                mobs.forEach((mob) => {
+                    if (Math.random() < 0.02) mob.userData.dir.set((Math.random()-0.5)*2, (Math.random()-0.5)*2); 
+                    mob.position.x += mob.userData.dir.x * delta * 1.5;
+                    mob.position.z += mob.userData.dir.y * delta * 1.5;
+                    if (mob.userData.dir.lengthSq() > 0.01) mob.rotation.y = Math.atan2(mob.userData.dir.x, mob.userData.dir.y); 
+                    const targetY = getSurfaceHeight(mob.position.x, mob.position.z);
+                    if (mob.position.y > targetY + 1.6) mob.position.y -= 10 * delta; else mob.position.y = targetY + 1.6; 
+                });
             }
             renderer.render(scene, camera);
         }
-
-        animate();
-        window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+        animate(); window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
     </script>
 </body>
 </html>
