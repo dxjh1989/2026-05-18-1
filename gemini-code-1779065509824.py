@@ -3,113 +3,260 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>星區總督指揮面板 - 帝國崛起</title>
+    <title>HTML5 Minecraft Clone</title>
     <style>
         body {
-            background-color: #0b0f19;
-            color: #00ffcc;
-            font-family: 'Courier New', Courier, monospace;
-            padding: 20px;
-            line-height: 1.6;
+            margin: 0;
+            overflow: hidden;
+            background-color: #78a7ff; /* 麥塊藍天色 */
+            font-family: sans-serif;
+            user-select: none;
         }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            border: 1px solid #00ffcc;
-            padding: 20px;
-            box-shadow: 0 0 15px rgba(0, 255, 204, 0.3);
-            border-radius: 8px;
-            background: linear-gradient(180deg, #111a2e 0%, #0b0f19 100%);
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            text-shadow: 2px 2px 0px #000;
+            font-size: 16px;
+            pointer-events: none;
+            line-height: 1.5;
         }
-        h1 {
-            text-align: center;
-            border-bottom: 2px solid #00ffcc;
-            padding-bottom: 10px;
-            text-shadow: 0 0 10px #00ffcc;
+        /* 畫面中央的經典十字準心 */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
         }
-        .stats {
-            display: flex;
-            justify-content: space-between;
-            background-color: rgba(0, 255, 204, 0.1);
-            padding: 15px;
-            border-radius: 5px;
-            font-weight: bold;
-            margin-bottom: 20px;
+        #crosshair::before, #crosshair::after {
+            content: '';
+            position: absolute;
+            background: white;
+            mix-blend-mode: difference; /* 讓準心在不同顏色背景都看得見 */
         }
-        .event-box {
-            background-color: rgba(255, 255, 255, 0.05);
-            padding: 15px;
-            border-left: 4px solid #ffcc00;
-            margin-bottom: 20px;
-            color: #e0e0e0;
-        }
-        .event-title {
-            color: #ffcc00;
-            font-size: 1.2em;
-            margin-bottom: 10px;
-        }
-        .options {
-            list-style-type: none;
-            padding: 0;
-        }
-        .options li {
-            background-color: #1a2639;
-            margin-bottom: 10px;
-            padding: 10px 15px;
-            border: 1px solid #334b6b;
+        #crosshair::before { top: 9px; left: 0; width: 20px; height: 2px; }
+        #crosshair::after { top: 0; left: 9px; width: 2px; height: 20px; }
+
+        #instructions {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            background: rgba(0,0,0,0.75);
+            padding: 30px;
+            border: 4px solid #333;
             border-radius: 4px;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        .options li:hover {
-            background-color: #00ffcc;
-            color: #0b0f19;
-            font-weight: bold;
-        }
-        .btn-custom {
-            display: block;
-            width: 100%;
-            background: transparent;
-            color: #00ffcc;
-            border: 1px dashed #00ffcc;
-            padding: 10px;
-            margin-top: 15px;
             text-align: center;
-            border-radius: 4px;
             cursor: pointer;
-        }
-        .btn-custom:hover {
-            background-color: rgba(0, 255, 204, 0.2);
         }
     </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
 </head>
 <body>
 
-<div class="container">
-    <h1>=== 第 1 回合 ===</h1>
-   
-    <div class="stats">
-        <span>⚔️ 軍事: 50</span>
-        <span>💰 經濟: 50</span>
-        <span>🤝 民心: 50</span>
-        <span>🔬 科技: 50</span>
-        <span>🗺️ 領土: 50</span>
+    <div id="ui">
+        <div>OnerWorld 測試版</div>
+        <div>位置: X: <span id="posX">0</span>, Y: <span id="posY">0</span>, Z: <span id="posZ">0</span></div>
+    </div>
+    <div id="crosshair"></div>
+    <div id="instructions">
+        <h2 style="color: #55ff55;">MINECRAFT HTML5</h2>
+        <p>點擊畫面 開始建造/破壞</p>
+        <p style="font-size: 14px; color: #aaa;">
+            移動：W, A, S, D<br>
+            跳躍：Space 空白鍵<br>
+            <span style="color: #ff5555;">破壞方塊：滑鼠左鍵</span><br>
+            <span style="color: #55ffff;">放置方塊：滑鼠右鍵</span>
+        </p>
     </div>
 
-    <div class="event-box">
-        <div class="event-title">📜 【局勢與事件：碎星帶的危機】</div>
-        <p>指揮官，歡迎來到「新星」邊境星區。深空探測站發來緊急警報：在邊境無人區「碎星帶」捕捉到異星求救訊號，並發現豐富的「零號元素」礦脈。然而，「猩紅之刃」星際海盜艦隊正在向該區域集結，打算劫掠資源並攔截訊號。</p>
-    </div>
+    <script>
+        // --- 1. 場景與渲染設定 ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x78a7ff);
+        scene.fog = new THREE.FogExp2(0x78a7ff, 0.02);
 
-    <h2 style="font-size: 1.2em; color: #fff;">🎯 請下達指令：</h2>
-    <ul class="options">
-        <li>[A] 派遣星際艦隊前往鎮壓海盜並調查訊號 (預期：引發交火，可能擴張領土與獲得科技)</li>
-        <li>[B] 秘密派遣重型採礦船前往邊緣偷採資源 (預期：獲得經濟收益，但平民有被襲擊風險)</li>
-        <li>[C] 封鎖邊境，升級星區行星防禦矩陣 (預期：提升科技與防禦，錯失良機影響民心)</li>
-    </ul>
-   
-    <button class="btn-custom">[D] 自定義指令 (開啟通訊終端輸入對策)</button>
-</div>
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: false }); // 關閉反鋸齒，更有像素感
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
 
+        // --- 2. 光線 (Minecraft 風格的強烈陽光) ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+        dirLight.position.set(40, 100, 20);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        // --- 3. 方塊材質與設定 ---
+        const BLOCK_SIZE = 2; // 每個方塊的大小
+        const worldBlocks = []; // 儲存所有方塊的陣列，用來做碰撞與滑鼠點擊偵測
+
+        // 簡單做出草地與泥土的顏色區分
+        const grassMaterial = new THREE.MeshStandardMaterial({ color: 0x5b8731, roughness: 0.9 });
+        const dirtMaterial = new THREE.MeshStandardMaterial({ color: 0x866043, roughness: 0.9 });
+        const blockGeometry = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+
+        // --- 4. 生成世界 (16x16 的區塊，共兩層：表面草地，下層泥土) ---
+        const WORLD_SIZE = 16;
+        function generateWorld() {
+            for (let x = -WORLD_SIZE; x < WORLD_SIZE; x++) {
+                for (let z = -WORLD_SIZE; z < WORLD_SIZE; z++) {
+                    // 第一層：草地 (Y = 0)
+                    createBlock(x * BLOCK_SIZE, 0, z * BLOCK_SIZE, grassMaterial);
+                    // 第二層：泥土 (Y = -2)
+                    createBlock(x * BLOCK_SIZE, -BLOCK_SIZE, z * BLOCK_SIZE, dirtMaterial);
+                }
+            }
+        }
+
+        function createBlock(x, y, z, material) {
+            const block = new THREE.Mesh(blockGeometry, material);
+            block.position.set(x, y, z);
+            block.castShadow = true;
+            block.receiveShadow = true;
+            scene.add(block);
+            worldBlocks.push(block);
+        }
+
+        generateWorld();
+
+        // --- 5. 玩家與控制 ---
+        const controls = new THREE.PointerLockControls(camera, document.body);
+        const instructions = document.getElementById('instructions');
+
+        instructions.addEventListener('click', () => controls.lock());
+        controls.addEventListener('lock', () => instructions.style.display = 'none');
+        controls.addEventListener('unlock', () => instructions.style.display = 'block');
+        scene.add(controls.getObject());
+
+        // 玩家初始位置 (站在草地上方)
+        controls.getObject().position.set(0, 4, 0);
+
+        // --- 6. 鍵盤與滑鼠操控 ---
+        const move = { forward: false, backward: false, left: false, right: false };
+        let velocity = new THREE.Vector3();
+        let direction = new THREE.Vector3();
+        let canJump = false;
+
+        document.addEventListener('keydown', (e) => {
+            switch (e.code) {
+                case 'KeyW': move.forward = true; break;
+                case 'KeyS': move.backward = true; break;
+                case 'KeyA': move.left = true; break;
+                case 'KeyD': move.right = true; break;
+                case 'Space': if (canJump) velocity.y += 12; canJump = false; break;
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            switch (e.code) {
+                case 'KeyW': move.forward = false; break;
+                case 'KeyS': move.backward = false; break;
+                case 'KeyA': move.left = false; break;
+                case 'KeyD': move.right = false; break;
+            }
+        });
+
+        // --- 7. 核心：破壞與放置方塊 (Raycaster 視線操作) ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2(0, 0); // 瞄準畫面正中央
+
+        document.addEventListener('mousedown', (e) => {
+            if (!controls.isLocked) return;
+
+            // 從相機中心發射一條視線
+            raycaster.setFromCamera(mouse, camera);
+            // 設定最遠只能挖到 15 單位距離的方塊
+            raycaster.far = 15; 
+            const intersects = raycaster.intersectObjects(worldBlocks);
+
+            if (intersects.length > 0) {
+                const intersect = intersects[0];
+
+                if (e.button === 0) {
+                    // 【左鍵：破壞方塊】
+                    scene.remove(intersect.object);
+                    const index = worldBlocks.indexOf(intersect.object);
+                    if (index > -1) worldBlocks.splice(index, 1);
+                } 
+                else if (e.button === 2) {
+                    // 【右鍵：放置方塊】
+                    // intersect.face.normal 會告訴我們滑鼠點到的是方塊的哪一面(上、下、左、右、前、後)
+                    const normal = intersect.face.normal;
+                    const newPosition = intersect.object.position.clone().add(
+                        normal.clone().multiplyScalar(BLOCK_SIZE)
+                    );
+
+                    // 在新位置蓋一個草地方塊
+                    createBlock(newPosition.x, newPosition.y, newPosition.z, grassMaterial);
+                }
+            }
+        });
+
+        // 阻擋瀏覽器右鍵選單，避免干擾放方塊
+        document.addEventListener('contextmenu', e => e.preventDefault());
+
+        // --- 8. 遊戲主迴圈 (物理與渲染) ---
+        const clock = new THREE.Clock();
+        const uiX = document.getElementById('posX');
+        const uiY = document.getElementById('posY');
+        const uiZ = document.getElementById('posZ');
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (controls.isLocked) {
+                const delta = clock.getDelta();
+
+                // 模擬物理阻力
+                velocity.x -= velocity.x * 10.0 * delta;
+                velocity.z -= velocity.z * 10.0 * delta;
+                velocity.y -= 9.8 * 3.5 * delta; // 重力
+
+                direction.z = Number(move.forward) - Number(move.backward);
+                direction.x = Number(move.right) - Number(move.left);
+                direction.normalize();
+
+                if (move.forward || move.backward) velocity.z -= direction.z * 120.0 * delta;
+                if (move.left || move.right) velocity.x -= direction.x * 120.0 * delta;
+
+                controls.moveRight(-velocity.x * delta);
+                controls.moveForward(-velocity.z * delta);
+                controls.getObject().position.y += (velocity.y * delta);
+
+                // 簡易地板碰撞 (防止掉進虛空)
+                if (controls.getObject().position.y < 3) {
+                    velocity.y = 0;
+                    controls.getObject().position.y = 3;
+                    canJump = true;
+                }
+
+                // 更新座標 UI (轉換成 Minecraft 的方塊座標單位)
+                uiX.innerText = Math.floor(controls.getObject().position.x / BLOCK_SIZE);
+                uiY.innerText = Math.floor(controls.getObject().position.y / BLOCK_SIZE) - 1;
+                uiZ.innerText = Math.floor(controls.getObject().position.z / BLOCK_SIZE);
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
 </body>
 </html>
